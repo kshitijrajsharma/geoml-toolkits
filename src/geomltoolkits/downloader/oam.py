@@ -38,7 +38,7 @@ async def download_tile(
             return
 
         tile_data = await response.content.read()
-        tile_filename = f"{prefix}_{tile_id.x}-{tile_id.y}-{tile_id.z}.tif"
+        tile_filename = f"{prefix}-{tile_id.x}-{tile_id.y}-{tile_id.z}.tif"
         tile_path = os.path.join(out_path, tile_filename)
 
         with open(tile_path, "wb") as f:
@@ -84,7 +84,8 @@ async def download_tiles(
         dump: Dump tile geometries to a GeoJSON file
     """
     # Ensure output directories exist
-    os.makedirs(os.path.join(out, "chips"), exist_ok=True)
+    chips_dir = os.path.join(out, "chips")
+    os.makedirs(chips_dir, exist_ok=True)
 
     # Get tiles based on input geometry
     tiles = get_tiles(geojson=geojson, bbox=bbox, zoom=zoom, within=within)
@@ -106,7 +107,7 @@ async def download_tiles(
                     session,
                     tile_id,
                     tms,
-                    os.path.join(out, "chips"),
+                    chips_dir,
                     georeference,
                     prefix,
                 )
@@ -120,6 +121,7 @@ async def download_tiles(
             await future
             pbar.update(1)
         pbar.close()
+    return chips_dir
 
 
 def main():

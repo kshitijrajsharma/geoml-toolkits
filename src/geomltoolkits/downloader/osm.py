@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import aiohttp
 
-from ..utils import get_geometry
+from ..utils import get_geometry, split_geojson_by_tiles
 
 
 class RawDataAPI:
@@ -136,6 +136,8 @@ async def download_osm_data(
     feature_type: str = "building",
     dump: bool = False,
     out: str = None,
+    split: bool = False,
+    split_prefix: str = "OAM",
 ) -> Dict[str, Any]:
     """
     Main async function to download OSM data for a given geometry.
@@ -168,8 +170,22 @@ async def download_osm_data(
         if dump and out:
             os.makedirs(out, exist_ok=True)
             output_path = os.path.join(out, "osm-result.geojson")
-            with open(output_path, "w") as f:
+            print("Dumping GeoJSON data to file...", output_path)
+
+            with open(output_path, "w", encoding="utf-8") as f:
                 json.dump(result_ret, f)
+            if split:
+                split_dir = os.path.join(out, "split")
+                print("Spllited GeoJSON wrt tiles saved to: ", split_dir)
+                os.makedirs(split_dir, exist_ok=True)
+                split_geojson_by_tiles(
+                    output_path,
+                    geojson,
+                    os.path.join(out, "split"),
+                    prefix=split_prefix,
+                )
+            return out
+
         return result_ret
 
     raise RuntimeError(f"Task failed with status: {result['status']}")
@@ -210,7 +226,11 @@ def main():
     parser.add_argument(
         "--dump", action="store_true", help="Save the extracted GeoJSON data to a file"
     )
-
+    parser.add_argument(
+        "--split",
+        action="store_true",
+        help="Split the output GeoJSON data into individual tiles",
+    )
     args = parser.parse_args()
 
     async def run():
@@ -222,6 +242,7 @@ def main():
                 args.feature_type,
                 args.dump,
                 args.out,
+                args.split,
             )
             print(json.dumps(result, indent=2))
         except Exception as e:

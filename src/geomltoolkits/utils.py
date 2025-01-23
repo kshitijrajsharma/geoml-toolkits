@@ -2,6 +2,7 @@ import json
 import os
 from typing import Any, Dict, Optional, Union
 
+import geopandas as gpd
 import mercantile
 from shapely.geometry import mapping, shape
 from shapely.ops import unary_union
@@ -130,7 +131,7 @@ def load_geometry(
         if input_data and isinstance(input_data, str):
             try:
                 # Try parsing as a file
-                with open(input_data, "r") as f:
+                with open(input_data, "r", encoding="utf-8") as f:
                     return json.load(f)
             except FileNotFoundError:
                 # If not a file, try parsing as a GeoJSON string
@@ -203,3 +204,28 @@ def check_geojson_geom(geojson: Dict[str, Any]) -> Dict[str, Any]:
             return mapping(union_geom)
     else:
         return geojson
+
+
+def split_geojson_by_tiles(
+    mother_geojson_path, children_geojson_path, output_dir, prefix="OAM"
+):
+    # Load mother GeoJSON (osm result)
+    mother_data = gpd.read_file(mother_geojson_path)
+
+    # Load children GeoJSON (tiles)
+    with open(children_geojson_path, "r", encoding="utf-8") as f:
+        tiles = json.load(f)
+
+    for tile in tiles["features"]:
+        tile_geom = shape(tile["geometry"])
+        tile_id = tile["properties"].get("id", tile["id"])
+        x, y, z = tile_id.split("(")[1].split(")")[0].split(", ")
+        x = x.split("=")[1]
+        y = y.split("=")[1]
+        z = z.split("=")[1]
+
+        clipped_data = mother_data[mother_data.intersects(tile_geom)].copy()
+        clipped_data = gpd.clip(clipped_data, tile_geom)
+
+        clipped_filename = os.path.join(output_dir, f"{prefix}-{x}-{y}-{z}.geojson")
+        clipped_data.to_file(clipped_filename, driver="GeoJSON", encoding="utf-8")
