@@ -54,6 +54,13 @@ await OSMDownloader.download_osm_data(
 Learn more [here](./example_usage.ipynb) 
 
 ### Command Line Usage
+if you install the python package it will by default install following two commands 
+
+- **oad**: openaerialmap downloader
+- **osd** : openstreetmap downloader
+
+You can see the helper function and shoot your command
+   
 You can also use the provided Bash script to run the GeoML Toolkits from the command line. 
 Take a look [here](./run.sh)
 
