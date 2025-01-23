@@ -1,5 +1,6 @@
 [project]
 name = "geomltoolkits"
+dynamic = ["version"]
 description = "Toolkits for Geospatial Machine Learning"
 authors = [
     {name = "kshitijrajsharma",email = "skshitizraj@gmail.com"}
@@ -17,7 +18,6 @@ dependencies = [
 
 [tool.poetry]
 version = "0.0.1"
-dynamic = ["version"]
 packages = [
     { include = "geomltoolkits", from = "src" }
 ]
