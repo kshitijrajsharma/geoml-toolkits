@@ -1,0 +1,43 @@
+[project]
+name = "geomltoolkits"
+description = "Toolkits for Geospatial Machine Learning"
+authors = [
+    {name = "kshitijrajsharma",email = "skshitizraj@gmail.com"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "mercantile (>=1.2.1,<2.0.0)",
+    "rasterio (>=1.4.3,<2.0.0)",
+    "shapely (>=2.0.6,<3.0.0)",
+    "tqdm (>=4.67.1,<5.0.0)",
+    "aiohttp (>=3.11.11,<4.0.0)"
+]
+
+[tool.poetry]
+version = "0.0.1"
+dynamic = ["version"]
+packages = [
+    { include = "geomltoolkits", from = "src" }
+]
+
+[tool.poetry.scripts]
+oad = "geomltoolkits.downloader.oam:main"
+osd = "geomltoolkits.downloader.osm:main"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.4"
+commitizen = "^4.1.0"
+
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+tag_format = "$version"
+version_scheme = "semver"
+version_provider = "poetry"
+update_changelog_on_bump = true
+major_version_zero = true
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
