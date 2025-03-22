@@ -2,8 +2,8 @@ import glob
 import os
 import unittest
 
-from geomltoolkits.downloader import oam as OAMDownloader
 from geomltoolkits.downloader import osm as OSMDownloader
+from geomltoolkits.downloader import tms as TMSDownloader
 
 
 class TestDownloader(unittest.IsolatedAsyncioTestCase):
@@ -22,7 +22,7 @@ class TestDownloader(unittest.IsolatedAsyncioTestCase):
 
     async def test_download_tiles(self):
         # Download tiles
-        await OAMDownloader.download_tiles(
+        await TMSDownloader.download_tiles(
             tms=self.tms,
             zoom=self.zoom,
             out=self.work_dir,
