@@ -10,7 +10,9 @@ import sys
 import geopandas as gpd
 import numpy as np
 import rasterio
+from orthogonalize import orthogonalize_gdf
 from PIL import Image
+from shapely import make_valid
 from shapely.geometry import Polygon
 from shapely.ops import polygonize, unary_union
 
@@ -185,6 +187,19 @@ def linestring_to_holefree_polygon(geom):
         return geom
 
 
+def filter_gdf_by_area(gdf, min_area=1):
+    orig_crs = gdf.crs
+    if orig_crs is None or orig_crs.is_geographic:
+        gdf_proj = gdf.to_crs("EPSG:3857")
+    else:
+        gdf_proj = gdf.copy()
+    gdf_proj["area_m2"] = gdf_proj.area
+    gdf_proj = gdf_proj[gdf_proj["area_m2"] >= min_area].copy()
+    if gdf_proj.crs != orig_crs:
+        gdf_proj = gdf_proj.to_crs(orig_crs)
+    return gdf_proj.drop(columns=["area_m2"])
+
+
 def load_and_fix_geojson(geojson_file, simplify_tolerance=0.3):
     """
     Load the GeoJSON into a GeoDataFrame, convert any LineStrings to Polygons,
@@ -233,6 +248,13 @@ def main():
     parser.add_argument(
         "--tmp", default=os.getcwd(), help="Temporary filedir (default: current dir)"
     )
+    parser.add_argument(
+        "-n",
+        "--no-orthogonalize",
+        action="store_true",
+        help="do not orthogonalize shape to snap 45 degrees",
+    )
+
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -258,7 +280,11 @@ def main():
     gdf = load_and_fix_geojson(
         os.path.join(args.tmp, "temp.geojson"), simplify_tolerance=0.2
     )
-
+    if not args.no_orthogonalize:
+        print("Orthogonalizing geometries...")
+        gdf = orthogonalize_gdf(gdf)
+        gdf = filter_gdf_by_area(gdf, min_area=1)
+        # gdf["geometry"] = gdf["geometry"].apply(fix_invalid_polygons)
     # Write the final cleaned GeoJSON without dissolving the features.
     gdf.to_file(args.output, driver="GeoJSON")
     logging.info("Final cleaned GeoJSON written to: " + args.output)
