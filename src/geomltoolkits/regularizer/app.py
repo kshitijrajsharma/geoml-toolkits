@@ -597,9 +597,6 @@ def main():
 
     args = parser.parse_args()
 
-    # Configure logging
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-
     # Create converter instance with command-line args
     converter = VectorizeMasks(
         simplify_tolerance=args.tolerance,

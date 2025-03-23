@@ -333,7 +333,7 @@ def orthogonalize_gdf(gdf, maxAngleChange=45, skewTolerance=0):
     for i in range(len(gdf_in)):
         build = gdf_in.loc[i, "geometry"]
 
-        if build.type == "MultiPolygon":  # Multipolygons
+        if build.geom_type == "MultiPolygon":  # Multipolygons
             multipolygon = []
             for poly in build:
                 buildOrtho = orthogonalize_polygon(poly, maxAngleChange, skewTolerance)
