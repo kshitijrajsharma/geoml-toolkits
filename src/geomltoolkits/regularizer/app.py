@@ -10,11 +10,12 @@ from typing import List, Tuple, Union
 import geopandas as gpd
 import numpy as np
 import rasterio
-from orthogonalize import orthogonalize_gdf
 from PIL import Image
 from rasterio import features
 from shapely.geometry import LineString, MultiLineString, MultiPolygon, Polygon
 from shapely.ops import polygonize, unary_union
+
+from .orthogonalize import orthogonalize_gdf
 
 
 class VectorizeMasks:
