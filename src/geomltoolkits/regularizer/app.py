@@ -564,7 +564,7 @@ class VectorizeMasks:
 def main():
     """Command-line entry point."""
     parser = argparse.ArgumentParser(
-        description="Convert a GeoTIFF to GeoJSON with advanced geometry cleaning and orthogonalization"
+        description="Convert a GeoTIFF masks to GeoJSON with advanced geometry cleaning and orthogonalization"
     )
     parser.add_argument("input", help="Input GeoTIFF file")
     parser.add_argument("output", help="Output GeoJSON file")
