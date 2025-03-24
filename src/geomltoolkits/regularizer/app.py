@@ -3,7 +3,6 @@ import argparse
 import json
 import logging
 import os
-import subprocess
 from typing import List, Tuple, Union
 
 import geopandas as gpd
@@ -15,6 +14,7 @@ from shapely.geometry import LineString, MultiLineString, MultiPolygon, Polygon
 from shapely.ops import polygonize, unary_union
 
 from .orthogonalize import orthogonalize_gdf
+from ..utils import run_command, convert_tif_to_bmp, update_geojson_coords
 
 
 class VectorizeMasks:
@@ -70,72 +70,6 @@ class VectorizeMasks:
         logger.addHandler(handler)
         return logger
 
-    def run_command(self, cmd: List[str]) -> subprocess.CompletedProcess:
-        """
-        Run a command via subprocess, logging its stdout and stderr.
-
-        Args:
-            cmd: Command to run as a list of strings
-
-        Returns:
-            CompletedProcess instance
-
-        Raises:
-            RuntimeError: If command fails
-        """
-        self.logger.info("Running command: " + " ".join(cmd))
-        try:
-            result = subprocess.run(
-                cmd,
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-            if result.stdout:
-                self.logger.info("stdout:\n" + result.stdout)
-            if result.stderr:
-                self.logger.info("stderr:\n" + result.stderr)
-            return result
-        except subprocess.CalledProcessError as e:
-            self.logger.error("Command failed: " + " ".join(cmd))
-            self.logger.error(e.stderr)
-            raise RuntimeError(f"Command failed: {' '.join(cmd)}")
-
-    def convert_tif_to_bmp(
-        self, input_tif: str, output_bmp: str
-    ) -> Tuple[rasterio.Affine, str]:
-        """
-        Read the GeoTIFF with rasterio, then convert its first band into an 8-bit
-        BMP image using Pillow. Returns the affine transform and CRS.
-
-        Args:
-            input_tif: Path to input GeoTIFF file
-            output_bmp: Path to output BMP file
-
-        Returns:
-            Tuple containing the affine transform and CRS
-        """
-        with rasterio.open(input_tif) as src:
-            # Read the first band as a NumPy array
-            array = src.read(1)
-            transform = src.transform
-            crs = src.crs
-
-        # Scale array to 0-255 if needed
-        if array.dtype != np.uint8:
-            array = ((array - array.min()) / (array.max() - array.min()) * 255).astype(
-                np.uint8
-            )
-        # Flip array vertically (BMP origin is at bottom-left)
-        array = np.flipud(array)
-
-        # Create a PIL image and save as BMP
-        img = Image.fromarray(array)
-        img.save(output_bmp, format="BMP")
-        self.logger.info(f"BMP image saved as {output_bmp}")
-        return transform, crs
-
     def run_potrace(self, bmp_file: str, output_geojson: str) -> None:
         """
         Run the Potrace command to vectorize the bitmap.
@@ -145,7 +79,7 @@ class VectorizeMasks:
             output_geojson: Path to output GeoJSON file
         """
         cmd = ["potrace", "-b", "geojson", "-o", output_geojson, bmp_file, "-i"]
-        self.run_command(cmd)
+        run_command(cmd)
 
     def pixel_to_geo(
         self, coord: Tuple[float, float], transform: rasterio.Affine
@@ -164,56 +98,6 @@ class VectorizeMasks:
         # Note: coord[0] is the column (x pixel) and coord[1] is the row (y pixel)
         x, y = transform * (coord[0], coord[1])
         return [x, y]
-
-    def update_geojson_coords(
-        self, geojson_file: str, transform: rasterio.Affine, crs: str
-    ) -> None:
-        """
-        Read the GeoJSON produced by Potrace (which is in pixel coordinates),
-        convert every coordinate to geographic space using the transform,
-        and add CRS info.
-
-        Args:
-            geojson_file: Path to the GeoJSON file to update
-            transform: Affine transform from rasterio
-            crs: Coordinate Reference System as string
-        """
-        with open(geojson_file, "r") as f:
-            geojson_data = json.load(f)
-
-        def convert_ring(ring):
-            return [self.pixel_to_geo(pt, transform) for pt in ring]
-
-        for feature in geojson_data.get("features", []):
-            geom = feature.get("geometry")
-            if not geom:
-                continue
-
-            if geom["type"] == "Polygon":
-                new_rings = []
-                for ring in geom["coordinates"]:
-                    new_rings.append(convert_ring(ring))
-                feature["geometry"]["coordinates"] = new_rings
-
-            elif geom["type"] == "MultiPolygon":
-                new_polygons = []
-                for polygon in geom["coordinates"]:
-                    new_polygon = []
-                    for ring in polygon:
-                        new_polygon.append(convert_ring(ring))
-                    new_polygons.append(new_polygon)
-                feature["geometry"]["coordinates"] = new_polygons
-
-        # Embed the CRS (non-standard but useful)
-        if crs:
-            geojson_data["crs"] = {
-                "type": "name",
-                "properties": {"name": str(crs)},
-            }
-
-        with open(geojson_file, "w") as f:
-            json.dump(geojson_data, f, indent=2)
-        self.logger.info(f"Updated GeoJSON saved as {geojson_file}")
 
     def vectorize_with_rasterio(
         self, input_tiff: str, threshold: float = 0
@@ -503,7 +387,7 @@ class VectorizeMasks:
 
         # Convert GeoTIFF to BMP
         self.logger.info("Converting GeoTIFF to BMP...")
-        transform, crs = self.convert_tif_to_bmp(input_tiff, temp_bmp)
+        transform, crs = convert_tif_to_bmp(input_tiff, temp_bmp)
         self.logger.info(f"Input CRS: {crs}")
 
         # Run Potrace on the BMP file
@@ -512,7 +396,7 @@ class VectorizeMasks:
 
         # Update the GeoJSON: convert pixel coordinates to geographic
         self.logger.info("Updating GeoJSON coordinates...")
-        self.update_geojson_coords(temp_geojson, transform, crs)
+        update_geojson_coords(temp_geojson, transform, crs)
 
         # Load updated GeoJSON into GeoPandas, fix geometries, and simplify
         self.logger.info("Loading GeoJSON into GeoPandas and cleaning geometries...")

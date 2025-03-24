@@ -1,13 +1,16 @@
 import json
 import os
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Union, List, Tuple
 
 import geopandas as gpd
 import mercantile
 import rasterio
 from rasterio.merge import merge
-from shapely.geometry import mapping, shape
-from shapely.ops import unary_union
+from shapely.geometry import mapping, shape, Polygon, MultiPolygon, LineString, MultiLineString
+from shapely.ops import unary_union, polygonize
+import subprocess
+import numpy as np
+from PIL import Image
 
 
 def merge_rasters(input_files, output_path):
@@ -262,3 +265,211 @@ def split_geojson_by_tiles(
 
         clipped_filename = os.path.join(output_dir, f"{prefix}-{x}-{y}-{z}.geojson")
         clipped_data.to_file(clipped_filename, driver="GeoJSON", encoding="utf-8")
+
+
+def detect_and_ensure_4326_geometry(geojson: Union[str, dict]) -> Dict[str, Any]:
+    """
+    Detect CRS from GeoJSON, convert to EPSG:4326 if needed, and union all geometries.
+    
+    Args:
+        geojson: GeoJSON file path, string, or dictionary
+        
+    Returns:
+        Single unioned GeoJSON geometry in EPSG:4326
+    """
+    if isinstance(geojson, str):
+        if os.path.exists(geojson):
+            gdf = gpd.read_file(geojson)
+        else:
+            try:
+                geojson_data = json.loads(geojson)
+                if "features" in geojson_data:
+                    gdf = gpd.GeoDataFrame.from_features(geojson_data["features"])
+                else:
+                    gdf = gpd.GeoDataFrame(geometry=[gpd.GeoSeries.from_json(geojson)[0]])
+            except json.JSONDecodeError:
+                raise ValueError(f"Invalid GeoJSON string provided")
+    else:
+        if "features" in geojson:
+            gdf = gpd.GeoDataFrame.from_features(geojson["features"])
+        else:
+            gdf = gpd.GeoDataFrame(geometry=[gpd.GeoSeries.from_json(json.dumps(geojson))[0]])
+    
+    if gdf.crs is None:
+        print("Warning: No CRS found in GeoJSON. Assuming EPSG:4326 (WGS84).")
+        gdf.set_crs(epsg=4326, inplace=True)
+    elif gdf.crs.to_epsg() != 4326:
+        original_crs = gdf.crs.to_epsg()
+        print(f"Converting GeoJSON from EPSG:{original_crs} to EPSG:4326 for API compatibility...")
+        gdf = gdf.to_crs(epsg=4326)
+    
+    unioned_geometry = unary_union(gdf.geometry.values)
+    return (gpd.GeoSeries([unioned_geometry]).set_crs(epsg=4326).__geo_interface__)
+
+
+def reproject_geojson(geojson_data: Dict[str, Any], target_crs: str) -> Dict[str, Any]:
+    """
+    Reproject GeoJSON data to the specified CRS.
+
+    Args:
+        geojson_data (dict): GeoJSON data to reproject
+        target_crs (str): Target CRS (e.g., "4326" or "3857")
+
+    Returns:
+        dict: Reprojected GeoJSON data
+    """
+    # Skip reprojection if target is already 4326 (which is what the API returns)
+    if target_crs == "4326":
+        return geojson_data
+
+    # Create a GeoDataFrame from the GeoJSON
+    gdf = gpd.GeoDataFrame.from_features(geojson_data["features"])
+    
+    # Set the CRS to 4326 (the CRS of the data from the API)
+    gdf.set_crs(epsg=4326, inplace=True)
+    
+    # Reproject to the target CRS
+    gdf = gdf.to_crs(epsg=int(target_crs))
+    
+    # Convert back to GeoJSON
+    reprojected_geojson = json.loads(gdf.to_json())
+    
+    # Add CRS information to the GeoJSON
+    reprojected_geojson["crs"] = {
+        "type": "name",
+        "properties": {"name": f"urn:ogc:def:crs:EPSG::{target_crs}"}
+    }
+    
+    return reprojected_geojson
+
+
+def run_command(cmd: List[str]) -> subprocess.CompletedProcess:
+    """
+    Run a command via subprocess, logging its stdout and stderr.
+
+    Args:
+        cmd: Command to run as a list of strings
+
+    Returns:
+        CompletedProcess instance
+
+    Raises:
+        RuntimeError: If command fails
+    """
+    print("Running command: " + " ".join(cmd))
+    try:
+        result = subprocess.run(
+            cmd,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if result.stdout:
+            print("stdout:\n" + result.stdout)
+        if result.stderr:
+            print("stderr:\n" + result.stderr)
+        return result
+    except subprocess.CalledProcessError as e:
+        print("Command failed: " + " ".join(cmd))
+        print(e.stderr)
+        raise RuntimeError(f"Command failed: {' '.join(cmd)}")
+
+
+def convert_tif_to_bmp(input_tif: str, output_bmp: str) -> Tuple[rasterio.Affine, str]:
+    """
+    Read the GeoTIFF with rasterio, then convert its first band into an 8-bit
+    BMP image using Pillow. Returns the affine transform and CRS.
+
+    Args:
+        input_tif: Path to input GeoTIFF file
+        output_bmp: Path to output BMP file
+
+    Returns:
+        Tuple containing the affine transform and CRS
+    """
+    with rasterio.open(input_tif) as src:
+        # Read the first band as a NumPy array
+        array = src.read(1)
+        transform = src.transform
+        crs = src.crs
+
+    # Scale array to 0-255 if needed
+    if array.dtype != np.uint8:
+        array = ((array - array.min()) / (array.max() - array.min()) * 255).astype(
+            np.uint8
+        )
+    # Flip array vertically (BMP origin is at bottom-left)
+    array = np.flipud(array)
+
+    # Create a PIL image and save as BMP
+    img = Image.fromarray(array)
+    img.save(output_bmp, format="BMP")
+    print(f"BMP image saved as {output_bmp}")
+    return transform, crs
+
+
+def update_geojson_coords(geojson_file: str, transform: rasterio.Affine, crs: str) -> None:
+    """
+    Read the GeoJSON produced by Potrace (which is in pixel coordinates),
+    convert every coordinate to geographic space using the transform,
+    and add CRS info.
+
+    Args:
+        geojson_file: Path to the GeoJSON file to update
+        transform: Affine transform from rasterio
+        crs: Coordinate Reference System as string
+    """
+    with open(geojson_file, "r") as f:
+        geojson_data = json.load(f)
+
+    def convert_ring(ring):
+        return [pixel_to_geo(pt, transform) for pt in ring]
+
+    for feature in geojson_data.get("features", []):
+        geom = feature.get("geometry")
+        if not geom:
+            continue
+
+        if geom["type"] == "Polygon":
+            new_rings = []
+            for ring in geom["coordinates"]:
+                new_rings.append(convert_ring(ring))
+            feature["geometry"]["coordinates"] = new_rings
+
+        elif geom["type"] == "MultiPolygon":
+            new_polygons = []
+            for polygon in geom["coordinates"]:
+                new_polygon = []
+                for ring in polygon:
+                    new_polygon.append(convert_ring(ring))
+                new_polygons.append(new_polygon)
+            feature["geometry"]["coordinates"] = new_polygons
+
+    # Embed the CRS (non-standard but useful)
+    if crs:
+        geojson_data["crs"] = {
+            "type": "name",
+            "properties": {"name": str(crs)},
+        }
+
+    with open(geojson_file, "w") as f:
+        json.dump(geojson_data, f, indent=2)
+    print(f"Updated GeoJSON saved as {geojson_file}")
+
+
+def pixel_to_geo(coord: Tuple[float, float], transform: rasterio.Affine) -> List[float]:
+    """
+    Convert pixel coordinates (col, row) to geographic coordinates (x, y)
+    using the affine transform.
+
+    Args:
+        coord: Tuple of (column, row) pixel coordinates
+        transform: Affine transform from rasterio
+
+    Returns:
+        List containing [x, y] geographic coordinates
+    """
+    # Note: coord[0] is the column (x pixel) and coord[1] is the row (y pixel)
+    x, y = transform * (coord[0], coord[1])
+    return [x, y]
