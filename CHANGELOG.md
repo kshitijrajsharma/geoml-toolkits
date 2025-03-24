@@ -1,3 +1,12 @@
+## 0.1.1 (2025-03-24)
+
+### Fix
+
+- **georef**: adds tile georeferencing
+- **consistency**: adds consistency on the crs
+- **crs**: adds support for 3857
+- **cmd**: update description for GeoTIFF to GeoJSON conversion
+
 ## 0.1.0 (2025-03-24)
 
 ### Feat
