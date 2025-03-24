@@ -4,8 +4,41 @@ from typing import Any, Dict, Optional, Union
 
 import geopandas as gpd
 import mercantile
+import rasterio
+from rasterio.merge import merge
 from shapely.geometry import mapping, shape
 from shapely.ops import unary_union
+
+
+def merge_rasters(input_files, output_path):
+    if isinstance(input_files, str):
+        if os.path.isdir(input_files):
+            files = []
+            for root, _, fs in os.walk(input_files):
+                for f in fs:
+                    if f.lower().endswith(".tif"):
+                        files.append(os.path.join(root, f))
+            input_files = files
+        else:
+            raise ValueError("input_files must be a list or directory")
+    elif not isinstance(input_files, list):
+        raise ValueError("input_files must be a list or directory")
+    src_files = [rasterio.open(fp) for fp in input_files]
+    mosaic, out_trans = merge(src_files)
+    out_meta = src_files[0].meta.copy()
+    out_meta.update(
+        {
+            "driver": "GTiff",
+            "height": mosaic.shape[1],
+            "width": mosaic.shape[2],
+            "transform": out_trans,
+        }
+    )
+    with rasterio.open(output_path, "w", **out_meta) as dest:
+        dest.write(mosaic)
+    for src in src_files:
+        src.close()
+    return output_path
 
 
 def bbox2geom(bbox):

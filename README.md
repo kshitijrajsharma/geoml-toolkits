@@ -19,7 +19,7 @@ Below is an example of how to use the GeoML Toolkits to download and process geo
 
 ```python
 import os
-from geomltoolkits.downloader import oam as OAMDownloader
+from geomltoolkits.downloader import tms as TMSDownloader
 from geomltoolkits.downloader import osm as OSMDownloader
 
 # Define area of interest
@@ -32,7 +32,7 @@ BBOX = [85.514668, 27.628367, 85.528875, 27.638514]
 os.makedirs(WORK_DIR, exist_ok=True)
 
 # Download tiles
-await OAMDownloader.download_tiles(
+await TMSDownloader.download_tiles(
     tms=TMS,
     zoom=ZOOM,
     out=WORK_DIR,

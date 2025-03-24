@@ -1,9 +1,13 @@
 import glob
 import os
+import shutil
 import unittest
 
-from geomltoolkits.downloader import oam as OAMDownloader
+import geopandas as gpd
+
 from geomltoolkits.downloader import osm as OSMDownloader
+from geomltoolkits.downloader import tms as TMSDownloader
+from geomltoolkits.regularizer import VectorizeMasks
 
 
 class TestDownloader(unittest.IsolatedAsyncioTestCase):
@@ -22,7 +26,7 @@ class TestDownloader(unittest.IsolatedAsyncioTestCase):
 
     async def test_download_tiles(self):
         # Download tiles
-        await OAMDownloader.download_tiles(
+        await TMSDownloader.download_tiles(
             tms=self.tms,
             zoom=self.zoom,
             out=self.work_dir,
@@ -46,6 +50,47 @@ class TestDownloader(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(
             os.path.isfile(osm_result_path), "OSM result file should be present"
         )
+
+
+class TestVectorizeMasks(unittest.TestCase):
+    def setUp(self):
+        # Create a temporary directory for test outputs
+        self.test_dir = "test_vectorize_output"
+        os.makedirs(self.test_dir, exist_ok=True)
+        # Define the input file and output file paths.
+        self.input_tif = os.path.join("data", "sample_predictions.tif")
+        self.output_geojson = os.path.join(self.test_dir, "sample_predictions_test.geojson")
+    
+    def tearDown(self):
+        # Cleanup the temporary directory after tests
+        if os.path.exists(self.test_dir):
+            shutil.rmtree(self.test_dir)
+
+    def test_vectorize_masks_sample(self):
+        # Skip test if input file does not exist.
+        if not os.path.exists(self.input_tif):
+            self.skipTest(f"Input file {self.input_tif} not found.")
+        
+        # Create a VectorizeMasks instance with test settings.
+        converter = VectorizeMasks(
+            simplify_tolerance=0.2,
+            min_area=1.0,
+            orthogonalize=True,
+            algorithm="potrace",
+            tmp_dir=os.getcwd()
+        )
+        
+        # Run the conversion.
+        converter.convert(self.input_tif, self.output_geojson)
+        
+        # Verify that the output file was created.
+        self.assertTrue(os.path.exists(self.output_geojson), 
+                        f"Output file {self.output_geojson} was not created.")
+        
+        # Load the output GeoJSON and check it has features.
+        gdf_loaded = gpd.read_file(self.output_geojson)
+        self.assertGreater(len(gdf_loaded), 0, "Generated GeoJSON contains no features.")
+        
 
 
 if __name__ == "__main__":
