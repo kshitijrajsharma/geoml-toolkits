@@ -54,10 +54,12 @@ await OSMDownloader.download_osm_data(
 Learn more [here](./example_usage.ipynb) 
 
 ### Command Line Usage
-if you install the python package it will by default install following two commands 
+if you install the python package it will by default install following  commands 
 
-- **oad**: openaerialmap downloader
+- **tmd**: tms downloader
 - **osd** : openstreetmap downloader
+- **reg** : footprints regularizer
+
 
 You can see the helper function and shoot your command
    
