@@ -5,8 +5,10 @@ import os
 from typing import List, Optional, Union
 
 import aiohttp
+import geopandas as gpd
 import mercantile
 import rasterio
+from pyproj import Transformer
 from rasterio.transform import from_bounds
 from tqdm import tqdm
 
@@ -20,6 +22,7 @@ async def download_tile(
     out_path: str,
     georeference: bool = False,
     prefix: str = "OAM",
+    crs: str = "4326",
 ) -> None:
     """
     Download a single tile asynchronously.
@@ -30,6 +33,8 @@ async def download_tile(
         tms: Tile map service URL template
         out_path: Output directory for the tile
         georeference: Whether to add georeference metadata
+        prefix: Prefix for output filename
+        crs: Coordinate reference system (4326 or 3857)
     """
     tile_url = tms.format(z=tile_id.z, x=tile_id.x, y=tile_id.y)
     async with session.get(tile_url) as response:
@@ -46,17 +51,28 @@ async def download_tile(
 
         if georeference:
             bounds = mercantile.bounds(tile_id)
-            with rasterio.Env(CPL_DEBUG=False):
-                with rasterio.open(
-                    tile_path,
-                    "r+",
-                ) as dataset:
-                    transform = from_bounds(*bounds, dataset.width, dataset.height)
-                    dataset.transform = transform
-                    dataset.update_tags(
-                        ns="rio_georeference", georeferencing_applied="True"
-                    )
-                    dataset.crs = rasterio.crs.CRS({"init": "epsg:4326"})
+            
+            # Handle different coordinate systems
+            if crs == "3857":
+                # Convert bounds from WGS84 to Web Mercator
+                transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+                xmin, ymin = transformer.transform(bounds.west, bounds.south)
+                xmax, ymax = transformer.transform(bounds.east, bounds.north)
+                mercator_bounds = (xmin, ymin, xmax, ymax)
+                
+                with rasterio.Env(CPL_DEBUG=False):
+                    with rasterio.open(tile_path, "r+") as dataset:
+                        transform = from_bounds(*mercator_bounds, dataset.width, dataset.height)
+                        dataset.transform = transform
+                        dataset.update_tags(ns="rio_georeference", georeferencing_applied="True")
+                        dataset.crs = rasterio.crs.CRS.from_epsg(3857)
+            else:  # Default to 4326
+                with rasterio.Env(CPL_DEBUG=False):
+                    with rasterio.open(tile_path, "r+") as dataset:
+                        transform = from_bounds(*bounds, dataset.width, dataset.height)
+                        dataset.transform = transform
+                        dataset.update_tags(ns="rio_georeference", georeferencing_applied="True")
+                        dataset.crs = rasterio.crs.CRS.from_epsg(4326)
 
 
 async def download_tiles(
@@ -69,6 +85,7 @@ async def download_tiles(
     georeference: bool = False,
     dump: bool = False,
     prefix: str = "OAM",
+    crs: str = "4326",
 ) -> None:
     """
     Download tiles from a GeoJSON or bounding box asynchronously.
@@ -82,6 +99,8 @@ async def download_tiles(
         within: Download only tiles completely within geometry
         georeference: Add georeference metadata to tiles
         dump: Dump tile geometries to a GeoJSON file
+        prefix: Prefix for output filenames
+        crs: Coordinate reference system (4326 or 3857)
     """
     # Ensure output directories exist
     chips_dir = os.path.join(out, "chips")
@@ -91,15 +110,34 @@ async def download_tiles(
     tiles = get_tiles(geojson=geojson, bbox=bbox, zoom=zoom, within=within)
     print(f"Total tiles fetched: {len(tiles)}")
 
-    # Optional tile geometry dumping
     if dump:
         feature_collection = {
             "type": "FeatureCollection",
             "features": [mercantile.feature(tile) for tile in tiles],
         }
+        
+        # For 3857, we need to reproject the geometries, not just set metadata
+        if crs == "3857":
+
+            gdf = gpd.GeoDataFrame.from_features(feature_collection["features"])
+            
+            gdf.set_crs(epsg=4326, inplace=True)
+            gdf = gdf.to_crs(epsg=3857)
+            reprojected_fc = json.loads(gdf.to_json())
+            feature_collection = reprojected_fc
+            
+            feature_collection["crs"] = {
+                "type": "name",
+                "properties": {"name": "urn:ogc:def:crs:EPSG::3857"}
+            }
+        else:
+            feature_collection["crs"] = {
+                "type": "name", 
+                "properties": {"name": "urn:ogc:def:crs:EPSG::4326"}
+            }
+            
         with open(os.path.join(out, "tiles.geojson"), "w") as f:
             json.dump(feature_collection, f)
-    # Download tiles
     async with aiohttp.ClientSession() as session:
         tasks = [
             asyncio.create_task(
@@ -110,12 +148,12 @@ async def download_tiles(
                     chips_dir,
                     georeference,
                     prefix,
+                    crs,
                 )
             )
             for tile_id in tiles
         ]
 
-        # Track download progress
         pbar = tqdm(total=len(tasks), unit="tile")
         for future in asyncio.as_completed(tasks):
             await future
@@ -171,6 +209,12 @@ def main():
         default="OAM",
         help="Prefix for output tile filenames (default: OAM).",
     )
+    parser.add_argument(
+        "--crs",
+        choices=["4326", "3857"],
+        default="4326",
+        help="Coordinate reference system for georeferenced tiles (default: 4326).",
+    )
 
     # Parse arguments and run
     args = parser.parse_args()
@@ -186,6 +230,7 @@ def main():
             georeference=args.georeference,
             dump=args.dump,
             prefix=args.prefix,
+            crs=args.crs,
         )
 
     asyncio.run(run())
