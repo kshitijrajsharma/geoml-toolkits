@@ -92,6 +92,31 @@ class TestVectorizeMasks(unittest.TestCase):
         self.assertGreater(len(gdf_loaded), 0, "Generated GeoJSON contains no features.")
         
 
+    def test_vectorize_masks_rasterio(self):
+        # Skip test if input file does not exist.
+        if not os.path.exists(self.input_tif):
+            self.skipTest(f"Input file {self.input_tif} not found.")
+        
+        # Create a VectorizeMasks instance with test settings.
+        converter = VectorizeMasks(
+            simplify_tolerance=0.2,
+            min_area=1.0,
+            orthogonalize=True,
+            algorithm="rasterio",
+            tmp_dir=os.getcwd()
+        )
+        
+        # Run the conversion.
+        converter.convert(self.input_tif, self.output_geojson)
+        
+        # Verify that the output file was created.
+        self.assertTrue(os.path.exists(self.output_geojson), 
+                        f"Output file {self.output_geojson} was not created.")
+        
+        # Load the output GeoJSON and check it has features.
+        gdf_loaded = gpd.read_file(self.output_geojson)
+        self.assertGreater(len(gdf_loaded), 0, "Generated GeoJSON contains no features.")
+        
 
 if __name__ == "__main__":
     unittest.main()
