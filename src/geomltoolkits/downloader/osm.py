@@ -214,7 +214,7 @@ async def download_osm_data(
     out: str = None,
     split: bool = False,
     split_prefix: str = "OAM",
-    output_crs: str = "4326",
+    crs: str = "4326",
 ) -> Dict[str, Any]:
     """
     Main async function to download OSM data for a given geometry.
@@ -228,7 +228,7 @@ async def download_osm_data(
         out (str): Output directory for saving files
         split (bool): Whether to split the output by tiles
         split_prefix (str): Prefix for split files
-        output_crs (str): Coordinate reference system for output data (4326 or 3857)
+        crs (str): Coordinate reference system for output data (4326 or 3857)
 
     Returns:
         dict: Downloaded GeoJSON data or output path if dump=True
@@ -257,14 +257,14 @@ async def download_osm_data(
         result_geojson = await api.download_snapshot(download_url)
         
         # Reproject if needed (API returns in 4326)
-        if output_crs != "4326":
-            print(f"Reprojecting output from EPSG:4326 to EPSG:{output_crs}...")
-            result_geojson = reproject_geojson(result_geojson, output_crs)
+        if crs != "4326":
+            print(f"Reprojecting output from EPSG:4326 to EPSG:{crs}...")
+            result_geojson = reproject_geojson(result_geojson, crs)
 
         if dump and out:
             os.makedirs(out, exist_ok=True)
             output_path = os.path.join(out, "osm-result.geojson")
-            print(f"Dumping GeoJSON data (EPSG:{output_crs}) to file: {output_path}")
+            print(f"Dumping GeoJSON data (EPSG:{crs}) to file: {output_path}")
 
             with open(output_path, "w", encoding="utf-8") as f:
                 json.dump(result_geojson, f)
@@ -344,7 +344,7 @@ def main():
                 args.dump,
                 args.out,
                 args.split,
-                output_crs=args.crs,
+                crs=args.crs,
             )
             if not args.dump:
                 print(json.dumps(result, indent=2))
