@@ -6,7 +6,6 @@ import os
 import subprocess
 from typing import List, Tuple, Union
 
-# Additional imports for GeoPandas based geometry cleaning
 import geopandas as gpd
 import numpy as np
 import rasterio

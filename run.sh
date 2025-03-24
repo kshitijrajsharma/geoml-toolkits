@@ -57,8 +57,8 @@ tmd --aoi $aoi --tms $tms --zoom $zoom --out "$work_dir" --georeference --dump
 echo "Downloading OSM data in the tile boundary..."
 osd --aoi "$work_dir/tiles.geojson" --dump --out "$work_dir"
 
-# # Split vector features to tiles and rasterize them
-# echo "Splitting vector features to tiles and rasterizing..."
-# python geojson2tiles.py --features "$work_dir/osm-result.geojson" --aoi $aoi --out "$work_dir" --zoom $zoom --binarymasks
+# Regularize footprints
+echo "Regularizing footprints..."
+reg --input "$work_dir/tiles.geojson" --output "$work_dir/regularized.geojson"
 
 echo "===== Script completed successfully ====="
