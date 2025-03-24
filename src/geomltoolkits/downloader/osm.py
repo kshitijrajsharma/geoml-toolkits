@@ -7,8 +7,85 @@ import zipfile
 from typing import Any, Dict, List, Optional, Union
 
 import aiohttp
+import geopandas as gpd
+from shapely.ops import unary_union
 
 from ..utils import get_geometry, split_geojson_by_tiles
+
+
+def detect_and_ensure_4326_geometry(geojson: Union[str, dict]) -> Dict[str, Any]:
+    """
+    Detect CRS from GeoJSON, convert to EPSG:4326 if needed, and union all geometries.
+    
+    Args:
+        geojson: GeoJSON file path, string, or dictionary
+        
+    Returns:
+        Single unioned GeoJSON geometry in EPSG:4326
+    """
+    if isinstance(geojson, str):
+        if os.path.exists(geojson):
+            gdf = gpd.read_file(geojson)
+        else:
+            try:
+                geojson_data = json.loads(geojson)
+                if "features" in geojson_data:
+                    gdf = gpd.GeoDataFrame.from_features(geojson_data["features"])
+                else:
+                    gdf = gpd.GeoDataFrame(geometry=[gpd.GeoSeries.from_json(geojson)[0]])
+            except json.JSONDecodeError:
+                raise ValueError(f"Invalid GeoJSON string provided")
+    else:
+        if "features" in geojson:
+            gdf = gpd.GeoDataFrame.from_features(geojson["features"])
+        else:
+            gdf = gpd.GeoDataFrame(geometry=[gpd.GeoSeries.from_json(json.dumps(geojson))[0]])
+    
+    if gdf.crs is None:
+        print("Warning: No CRS found in GeoJSON. Assuming EPSG:4326 (WGS84).")
+        gdf.set_crs(epsg=4326, inplace=True)
+    elif gdf.crs.to_epsg() != 4326:
+        original_crs = gdf.crs.to_epsg()
+        print(f"Converting GeoJSON from EPSG:{original_crs} to EPSG:4326 for API compatibility...")
+        gdf = gdf.to_crs(epsg=4326)
+    
+    unioned_geometry = unary_union(gdf.geometry.values)
+    return (gpd.GeoSeries([unioned_geometry]).set_crs(epsg=4326).__geo_interface__)
+
+def reproject_geojson(geojson_data: Dict[str, Any], target_crs: str) -> Dict[str, Any]:
+    """
+    Reproject GeoJSON data to the specified CRS.
+
+    Args:
+        geojson_data (dict): GeoJSON data to reproject
+        target_crs (str): Target CRS (e.g., "4326" or "3857")
+
+    Returns:
+        dict: Reprojected GeoJSON data
+    """
+    # Skip reprojection if target is already 4326 (which is what the API returns)
+    if target_crs == "4326":
+        return geojson_data
+
+    # Create a GeoDataFrame from the GeoJSON
+    gdf = gpd.GeoDataFrame.from_features(geojson_data["features"])
+    
+    # Set the CRS to 4326 (the CRS of the data from the API)
+    gdf.set_crs(epsg=4326, inplace=True)
+    
+    # Reproject to the target CRS
+    gdf = gdf.to_crs(epsg=int(target_crs))
+    
+    # Convert back to GeoJSON
+    reprojected_geojson = json.loads(gdf.to_json())
+    
+    # Add CRS information to the GeoJSON
+    reprojected_geojson["crs"] = {
+        "type": "name",
+        "properties": {"name": f"urn:ogc:def:crs:EPSG::{target_crs}"}
+    }
+    
+    return reprojected_geojson
 
 
 class RawDataAPI:
@@ -96,7 +173,6 @@ class RawDataAPI:
 
         Args:
             download_url (str): URL to download the data
-            dump (bool): Whether to save the data to a file. Defaults to False.
 
         Returns:
             dict: Parsed GeoJSON data
@@ -138,21 +214,34 @@ async def download_osm_data(
     out: str = None,
     split: bool = False,
     split_prefix: str = "OAM",
+    output_crs: str = "4326",
 ) -> Dict[str, Any]:
     """
     Main async function to download OSM data for a given geometry.
 
     Args:
-        geometry (dict): GeoJSON geometry to query
+        geojson (str|dict): GeoJSON file path, string, or dictionary
+        bbox (list): Bounding box coordinates [xmin, ymin, xmax, ymax]
         api_url (str): Base API URL
         feature_type (str): Type of features to download
         dump (bool): Whether to save the result to a file
         out (str): Output directory for saving files
+        split (bool): Whether to split the output by tiles
+        split_prefix (str): Prefix for split files
+        output_crs (str): Coordinate reference system for output data (4326 or 3857)
 
     Returns:
-        dict: Downloaded GeoJSON data
+        dict: Downloaded GeoJSON data or output path if dump=True
     """
-    geometry = get_geometry(geojson, bbox)
+    # Handle input with bbox or geojson
+    if geojson is not None:
+        # Detect CRS and convert to 4326 for API compatibility
+        geometry = detect_and_ensure_4326_geometry(geojson)
+    else:
+        # For bbox, assume it's in EPSG:4326 as that's the common format
+        # If we need to support other CRS for bbox, we would need to add that functionality
+        geometry = get_geometry(None, bbox)
+    
     api = RawDataAPI(api_url)
     print("OSM Data Last Updated : ", await api.last_updated())
     task_response = await api.request_snapshot(geometry, feature_type)
@@ -165,18 +254,24 @@ async def download_osm_data(
 
     if result["status"] == "SUCCESS" and result["result"].get("download_url"):
         download_url = result["result"]["download_url"]
-        result_ret = await api.download_snapshot(download_url)
+        result_geojson = await api.download_snapshot(download_url)
+        
+        # Reproject if needed (API returns in 4326)
+        if output_crs != "4326":
+            print(f"Reprojecting output from EPSG:4326 to EPSG:{output_crs}...")
+            result_geojson = reproject_geojson(result_geojson, output_crs)
 
         if dump and out:
             os.makedirs(out, exist_ok=True)
             output_path = os.path.join(out, "osm-result.geojson")
-            print("Dumping GeoJSON data to file...", output_path)
+            print(f"Dumping GeoJSON data (EPSG:{output_crs}) to file: {output_path}")
 
             with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(result_ret, f)
+                json.dump(result_geojson, f)
+                
             if split:
                 split_dir = os.path.join(out, "split")
-                print("Spllited GeoJSON wrt tiles saved to: ", split_dir)
+                print(f"Splitting GeoJSON with respect to tiles, saving to: {split_dir}")
                 os.makedirs(split_dir, exist_ok=True)
                 split_geojson_by_tiles(
                     output_path,
@@ -186,7 +281,7 @@ async def download_osm_data(
                 )
             return out
 
-        return result_ret
+        return result_geojson
 
     raise RuntimeError(f"Task failed with status: {result['status']}")
 
@@ -208,7 +303,7 @@ def main():
         nargs=4,
         type=float,
         metavar=("xmin", "ymin", "xmax", "ymax"),
-        help="Bounding box coordinates.",
+        help="Bounding box coordinates (assumed to be in EPSG:4326).",
     )
     parser.add_argument(
         "--api-url",
@@ -231,6 +326,12 @@ def main():
         action="store_true",
         help="Split the output GeoJSON data into individual tiles",
     )
+    parser.add_argument(
+        "--crs",
+        choices=["4326", "3857"],
+        default="4326",
+        help="Coordinate reference system for output data (default: 4326)",
+    )
     args = parser.parse_args()
 
     async def run():
@@ -243,8 +344,12 @@ def main():
                 args.dump,
                 args.out,
                 args.split,
+                output_crs=args.crs,
             )
-            print(json.dumps(result, indent=2))
+            if not args.dump:
+                print(json.dumps(result, indent=2))
+            else:
+                print(f"Downloaded OSM data saved to: {result}")
         except Exception as e:
             print(f"Error: {e}")
 

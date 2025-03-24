@@ -51,7 +51,7 @@ mkdir -p "$work_dir"
 
 # Download images first as chips
 echo "Downloading images as chips..."
-oad --aoi $aoi --tms $tms --zoom $zoom --out "$work_dir" --georeference --dump
+tmd --aoi $aoi --tms $tms --zoom $zoom --out "$work_dir" --georeference --dump
 
 # Download osm data in the tile boundary
 echo "Downloading OSM data in the tile boundary..."
