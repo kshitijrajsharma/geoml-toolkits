@@ -4,7 +4,6 @@ Toolkits for GeoML workflows
 
 Currently it supports for downloading and processing geospatial data from Open Aerial Map (OAM) and OpenStreetMap (OSM). This toolkit allows you to define an area of interest, download aerial imagery and OSM data, and generate training data for machine learning models.
 
-https://docs.google.com/document/d/1H_EXy1TQhizG3K_GuBHiIEO7RpURtN6jVJSGE5ORdA8/edit?usp=sharing 
 
 ## Installation
 
