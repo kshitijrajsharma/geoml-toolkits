@@ -497,6 +497,7 @@ class VectorizeMasks:
         Returns:
             GeoDataFrame with processed data
         """
+        os.makedirs(self.tmp_dir, exist_ok=True)
         # Create temporary file paths
         temp_bmp = os.path.join(self.tmp_dir, "temp_convert.bmp")
         temp_geojson = os.path.join(self.tmp_dir, "temp_convert.geojson")
