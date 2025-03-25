@@ -1,3 +1,9 @@
+## 0.1.2 (2025-03-25)
+
+### Fix
+
+- **edge**: fixes edge artifacts during georeferencing
+
 ## 0.1.1 (2025-03-24)
 
 ### Fix
