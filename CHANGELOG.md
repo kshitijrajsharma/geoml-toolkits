@@ -1,3 +1,9 @@
+## 0.1.6 (2025-03-25)
+
+### Fix
+
+- **size**: fixes filesize to be hardcoded in tiles
+
 ## 0.1.5 (2025-03-25)
 
 ### Fix
