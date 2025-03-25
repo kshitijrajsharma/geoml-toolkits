@@ -1,3 +1,9 @@
+## 0.1.4 (2025-03-25)
+
+### Fix
+
+- **dir**: fix new dir if there is in tmp
+
 ## 0.1.3 (2025-03-25)
 
 ### Fix
