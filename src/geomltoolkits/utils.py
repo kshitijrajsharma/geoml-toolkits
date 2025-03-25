@@ -123,7 +123,7 @@ def georeference_tile(
             if overlap_pixels > 0:
                 dst.update_tags(ns="rio_georeference", overlap_applied=str(overlap_pixels))
     
-    print(f"Successfully georeferenced tile to EPSG:{crs} with {overlap_pixels} pixels overlap: {output_tiff}")
+    # print(f"Successfully georeferenced tile to EPSG:{crs} with {overlap_pixels} pixels overlap: {output_tiff}")
     return output_tiff
 
 
