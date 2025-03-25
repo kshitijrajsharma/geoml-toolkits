@@ -12,6 +12,36 @@ from shapely.geometry import mapping, shape
 from shapely.ops import unary_union
 
 
+def merge_rasters(input_files, output_path):
+    if isinstance(input_files, str):
+        if os.path.isdir(input_files):
+            files = []
+            for root, _, fs in os.walk(input_files):
+                for f in fs:
+                    if f.lower().endswith(".tif"):
+                        files.append(os.path.join(root, f))
+            input_files = files
+        else:
+            raise ValueError("input_files must be a list or directory")
+    elif not isinstance(input_files, list):
+        raise ValueError("input_files must be a list or directory")
+    src_files = [rasterio.open(fp) for fp in input_files]
+    mosaic, out_trans = merge(src_files)
+    out_meta = src_files[0].meta.copy()
+    out_meta.update(
+        {
+            "driver": "GTiff",
+            "height": mosaic.shape[1],
+            "width": mosaic.shape[2],
+            "transform": out_trans,
+        }
+    )
+    with rasterio.open(output_path, "w", **out_meta) as dest:
+        dest.write(mosaic)
+    for src in src_files:
+        src.close()
+    return output_path
+
 def georeference_tile(
     input_tiff: str,
     x: int,
@@ -45,17 +75,14 @@ def georeference_tile(
         kwargs = src.meta.copy()
         
         if overlap_pixels > 0:
-            # Calculate the geo units per pixel to adjust bounds , this is to adjust the edge artificats that happens when you merge tiles 
             if crs == "3857":
                 transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
                 xmin, ymin = transformer.transform(bounds.west, bounds.south)
                 xmax, ymax = transformer.transform(bounds.east, bounds.north)
                 
-                # Calculate resolution in web mercator units
                 x_res = (xmax - xmin) / src.width
                 y_res = (ymax - ymin) / src.height
                 
-                # Adjust bounds with overlap
                 xmin -= (overlap_pixels * x_res)
                 ymin -= (overlap_pixels * y_res)
                 xmax += (overlap_pixels * x_res)
@@ -64,11 +91,9 @@ def georeference_tile(
                 mercator_bounds = (xmin, ymin, xmax, ymax)
                 transform = from_bounds(*mercator_bounds, src.width, src.height)
             else:
-                # Calculate resolution in degrees
                 x_res = (bounds.east - bounds.west) / src.width
                 y_res = (bounds.north - bounds.south) / src.height
                 
-                # Adjust bounds with overlap
                 adjusted_bounds = (
                     bounds.west - (overlap_pixels * x_res),
                     bounds.south - (overlap_pixels * y_res),
@@ -78,7 +103,6 @@ def georeference_tile(
                 
                 transform = from_bounds(*adjusted_bounds, src.width, src.height)
         else:
-            # Standard georeferencing without overlap
             if crs == "3857":
                 transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
                 xmin, ymin = transformer.transform(bounds.west, bounds.south)
@@ -88,13 +112,11 @@ def georeference_tile(
             else:
                 transform = from_bounds(*bounds, src.width, src.height)
         
-        # Update metadata with CRS and transform
         kwargs.update({
             'crs': rasterio.CRS.from_epsg(3857 if crs == "3857" else 4326),
             'transform': transform
         })
         
-        # Write georeferenced file
         with rasterio.open(output_tiff, 'w', **kwargs) as dst:
             dst.write(src.read())
             dst.update_tags(ns="rio_georeference", georeferencing_applied="True")
@@ -326,60 +348,3 @@ def split_geojson_by_tiles(
 
         clipped_filename = os.path.join(output_dir, f"{prefix}-{x}-{y}-{z}.geojson")
         clipped_data.to_file(clipped_filename, driver="GeoJSON", encoding="utf-8")
-
-def georeference_tile(
-    input_tiff: str,
-    x: int,
-    y: int,
-    z: int,
-    output_tiff: str,
-    crs: str = "4326"
-) -> str:
-    """
-    Georeference a TIFF image based on tile coordinates (x, y, z).
-    
-    Args:
-        input_tiff: Path to input TIFF file
-        x: Tile x coordinate
-        y: Tile y coordinate
-        z: Tile z coordinate (zoom level)
-        output_tiff: Path to save the georeferenced output file
-        crs: Coordinate reference system (4326 or 3857)
-        
-    Returns:
-        Path to georeferenced TIFF file
-    """
-    tile = mercantile.Tile(x=x, y=y, z=z)
-    
-    bounds = mercantile.bounds(tile)
-    
-    
-    os.makedirs(os.path.dirname(os.path.abspath(output_tiff)), exist_ok=True)
-    
-    with rasterio.open(input_tiff) as src:
-        kwargs = src.meta.copy()
-        
-        if crs == "3857":
-            transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
-            xmin, ymin = transformer.transform(bounds.west, bounds.south)
-            xmax, ymax = transformer.transform(bounds.east, bounds.north)
-            mercator_bounds = (xmin, ymin, xmax, ymax)
-            
-            transform = from_bounds(*mercator_bounds, src.width, src.height)
-            kwargs.update({
-                'crs': rasterio.CRS.from_epsg(3857),
-                'transform': transform
-            })
-        else:  
-            transform = from_bounds(*bounds, src.width, src.height)
-            kwargs.update({
-                'crs': rasterio.CRS.from_epsg(4326),
-                'transform': transform
-            })
-        
-        with rasterio.open(output_tiff, 'w', **kwargs) as dst:
-            dst.write(src.read())
-            dst.update_tags(ns="rio_georeference", georeferencing_applied="True")
-    
-    print(f"Successfully georeferenced tile to EPSG:{crs}: {output_tiff}")
-    return output_tiff
