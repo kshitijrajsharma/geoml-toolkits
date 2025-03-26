@@ -153,6 +153,13 @@ await OSMDownloader.download_osm_data(
 This repo utiltizes a digital art technique to vectorize features from masks using our awesome old [potrace](https://potrace.sourceforge.net/) library . Potrace is not meant for geospatial workflows however it does excellent job on tracing vector graphics from raster. I  thought it would easily overcome the current rasteriation issues of irregular geometries and hence worked on the spatial integration . Below is the example how potrace works 
 ![image](https://github.com/user-attachments/assets/e2f41ff2-9226-4f53-be84-4ae22cb43360)
 
+Repo uses orthogonalization script and potrace also provides rasterio rasterization option as well ! 
+
+Example of vectorization output : 
+
+![image](https://github.com/user-attachments/assets/ff880321-6ff3-46b0-b098-9426c3a31fc6)
+
+
 
 To regularize building footprints, you can use the `VectorizeMasks` class from the `regularizer` module. Here is an example:
 
