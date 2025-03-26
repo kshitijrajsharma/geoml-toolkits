@@ -150,6 +150,10 @@ await OSMDownloader.download_osm_data(
 
 #### Regularizing Footprints
 
+This repo utiltizes a digital art technique to vectorize features from masks using our awesome old [potrace](https://potrace.sourceforge.net/) library . Potrace is not meant for geospatial workflows however it does excellent job on tracing vector graphics from raster. I  thought it would easily overcome the current rasteriation issues of irregular geometries and hence worked on the spatial integration . Below is the example how potrace works 
+![image](https://github.com/user-attachments/assets/e2f41ff2-9226-4f53-be84-4ae22cb43360)
+
+
 To regularize building footprints, you can use the `VectorizeMasks` class from the `regularizer` module. Here is an example:
 
 ```python
