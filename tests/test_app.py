@@ -24,6 +24,27 @@ class TestDownloader(unittest.IsolatedAsyncioTestCase):
         ]
         os.makedirs(self.work_dir, exist_ok=True)
 
+
+    async def test_download_tiles_from_tilejson(self):
+        """Test downloading tiles using a TileJSON URL."""
+        tilejson_url = "https://titiler.hotosm.org/cog/WebMercatorQuad/tilejson.json?url=https://oin-hotosm-temp.s3.us-east-1.amazonaws.com/62d85d11d8499800053796c1/0/62d85d11d8499800053796c2.tif"
+        
+        tilejson_test_dir = os.path.join(self.work_dir, "tilejson_test")
+        os.makedirs(tilejson_test_dir, exist_ok=True)
+        
+        await TMSDownloader.download_tiles(
+            tms=tilejson_url,
+            zoom=self.zoom,
+            out=tilejson_test_dir,
+            bbox=self.bbox,
+            georeference=True,
+            dump=True,
+            prefix="TileJSON",
+            is_tilejson=True,  # This flag tells the downloader to treat the URL as TileJSON
+        )
+        
+        tif_files = glob.glob(os.path.join(tilejson_test_dir, "chips", "*.tif"))
+        self.assertEqual(len(tif_files), 36, "Number of .tif files should be 36")
     async def test_download_tiles(self):
         # Download tiles
         await TMSDownloader.download_tiles(
