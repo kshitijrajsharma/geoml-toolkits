@@ -1,3 +1,13 @@
+## 0.2.0 (2025-05-07)
+
+### Feat
+
+- **tile**: enhance tile fetching and URL handling; support TileJSON and improved georeferencing
+
+### Fix
+
+- **tms**: adds multiple tms support and fixes for the negative xyz server to download
+
 ## 0.1.6 (2025-03-25)
 
 ### Fix
