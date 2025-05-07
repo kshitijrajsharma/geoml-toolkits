@@ -29,7 +29,7 @@ class TileSource:
         self, 
         url: str, 
         scheme: str = "xyz",
-        format: Optional[str] = None,
+        format: Optional[str] = 'tif',
         min_zoom: int = 2,
         max_zoom: int = 18
     ):
@@ -39,12 +39,7 @@ class TileSource:
         self.min_zoom = min_zoom
         self.max_zoom = max_zoom
         self.tilejson = None
-        
-        if not format and '{format}' not in url:
-            ext_match = re.search(r'\.([a-zA-Z0-9]+)(?:\?|$)', url)
-            if ext_match:
-                self.format = ext_match.group(1)
-    
+
     @classmethod
     async def from_tilejson(cls, session: aiohttp.ClientSession, tilejson_url: str):
         tilejson = await fetch_tilejson(session, tilejson_url)
@@ -147,25 +142,8 @@ async def download_tile(
             print(f"Error fetching tile {tile_id}: {response.status}")
             return
 
-        content_type = response.headers.get('Content-Type', '')
-        
-        if 'tiff' in content_type.lower() or 'tif' in content_type.lower():
-            extension = 'tif'
-        elif 'png' in content_type.lower():
-            extension = 'png'
-        elif 'jpeg' in content_type.lower() or 'jpg' in content_type.lower():
-            extension = 'jpg'
-        elif 'webp' in content_type.lower():
-            extension = 'webp'
-        else:
-            if isinstance(tile_source, TileSource) and tile_source.format:
-                extension = tile_source.format
-            else:
-                url_ext = os.path.splitext(tile_url.split('?')[0])[1]
-                if url_ext and url_ext.startswith('.'):
-                    extension = url_ext[1:]
-                else:
-                    extension = 'tif'
+   
+        extension = 'tif'
         
         tile_data = await response.content.read()
         tile_filename = f"{prefix}-{tile_id.x}-{tile_id.y}-{tile_id.z}.{extension}"
