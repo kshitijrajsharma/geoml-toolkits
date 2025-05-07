@@ -190,7 +190,7 @@ def generate_tiles_from_geojson(geojson_data, zoom, within):
             tile_bounds.extend(
                 filter_tiles(
                     mercantile.tiles(
-                        *shape(geometry).bounds, zooms=zoom, truncate=False
+                        *shape(geometry).bounds, zooms=zoom, truncate=True
                     ),
                     geometry,
                     within,
@@ -200,7 +200,7 @@ def generate_tiles_from_geojson(geojson_data, zoom, within):
         geometry = geojson_data
         tile_bounds.extend(
             filter_tiles(
-                mercantile.tiles(*shape(geometry).bounds, zooms=zoom, truncate=False),
+                mercantile.tiles(*shape(geometry).bounds, zooms=zoom, truncate=True),
                 geometry,
                 within,
             )
@@ -211,7 +211,7 @@ def generate_tiles_from_geojson(geojson_data, zoom, within):
 def generate_tiles_from_bbox(bbox, zoom, within):
     """Generate tiles based on a bounding box."""
     return filter_tiles(
-        mercantile.tiles(*bbox, zooms=zoom, truncate=False), bbox2geom(bbox), within
+        mercantile.tiles(*bbox, zooms=zoom, truncate=True), bbox2geom(bbox), within
     )
 
 
