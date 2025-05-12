@@ -76,24 +76,17 @@ If the split argument is set to True, the downloaded OSM data will be split base
 ### Prerequisites
 
 - Python 3.10 or higher
-- [poetry](https://python-poetry.org/) 
+- [uv](https://docs.astral.sh/uv/) 
 
-### Install Poetry
-
-If you don't have poetry installed, you can install it using the following command:
-
-```bash
-pip install poetry
-```
 
 #### Install 
 ```bash
-poetry install
+uv sync
 ```
 
 ### Install lib locally 
 ```bash
-pip install -e . 
+uv run pip install -e . 
 ``` 
 
 ### Detailed Usage Instructions
@@ -215,8 +208,6 @@ pip install geomltoolkits
 If you want to install the library locally for development, you can use the following commands:
 
 ```sh
-pip install poetry
-poetry install
 pip install -e .
 ```
 
