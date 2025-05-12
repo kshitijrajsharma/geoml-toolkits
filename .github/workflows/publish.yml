@@ -24,7 +24,7 @@ jobs:
           cache-dependency-glob: "uv.lock"
 
       - name: Install dependencies
-        run: uv sync --no-group dev --no-group docs --no-group docs
+        run: uv sync --no-group dev
 
       - name: Build package
         run: uv build --no-sources
