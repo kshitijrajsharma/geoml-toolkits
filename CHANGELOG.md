@@ -1,3 +1,13 @@
+## 0.3.0 (2025-05-12)
+
+### Feat
+
+- **uv-support**: removes poetry and adds uv
+
+### Fix
+
+- **workflow**: adjust job strategy and permissions in test workflow
+
 ## 0.2.0 (2025-05-07)
 
 ### Feat
