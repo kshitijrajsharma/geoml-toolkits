@@ -9,6 +9,10 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
+      fail-fast: false
     permissions:
       id-token: write
     steps:
