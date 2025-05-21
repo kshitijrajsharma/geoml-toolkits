@@ -1,3 +1,10 @@
+## 0.3.3 (2025-05-21)
+
+### Fix
+
+- **python**: bumps python version
+- **workflow**: update uv setup step to use version 6 and streamline Python installation
+
 ## 0.3.2 (2025-05-21)
 
 ### Fix

@@ -1,6 +1,6 @@
 [project]
 name = "geomltoolkits"
-version = "0.3.2"
+version = "0.3.3"
 description = "Toolkits for Geospatial Machine Learning"
 authors = [
     {name = "kshitijrajsharma",email = "skshitizraj@gmail.com"}
