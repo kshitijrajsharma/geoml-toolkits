@@ -1,3 +1,9 @@
+## 0.3.2 (2025-05-21)
+
+### Fix
+
+- **shapely-version**: downgrade shapely , support smaller version
+
 ## 0.3.1 (2025-05-21)
 
 ### Fix
