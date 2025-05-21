@@ -29,7 +29,6 @@ import math
 import statistics
 
 import geopandas as gpd
-import shapely
 from shapely import speedups
 from shapely.geometry import MultiPolygon, Polygon
 

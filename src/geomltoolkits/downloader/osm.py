@@ -8,7 +8,10 @@ from typing import Any, Dict, List, Optional, Union
 
 import aiohttp
 import geopandas as gpd
-from shapely.ops import unary_union
+try:
+    from shapely.ops import unary_union
+except ImportError:
+    from shapely.ops import cascaded_union as unary_union
 
 from ..utils import get_geometry, split_geojson_by_tiles
 

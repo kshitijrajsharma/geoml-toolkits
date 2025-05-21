@@ -12,7 +12,12 @@ import rasterio
 from PIL import Image
 from rasterio import features
 from shapely.geometry import LineString, MultiLineString, MultiPolygon, Polygon
-from shapely.ops import polygonize, unary_union
+from shapely.ops import polygonize
+
+try:
+    from shapely.ops import unary_union
+except ImportError:
+    from shapely.ops import cascaded_union as unary_union
 
 from .orthogonalize import orthogonalize_gdf
 
