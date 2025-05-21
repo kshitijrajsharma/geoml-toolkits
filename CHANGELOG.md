@@ -1,3 +1,10 @@
+## 0.3.1 (2025-05-21)
+
+### Fix
+
+- **shapely**: support old version of shapely
+- **workflow**: remove redundant group flags in dependency sync step
+
 ## 0.3.0 (2025-05-12)
 
 ### Feat
