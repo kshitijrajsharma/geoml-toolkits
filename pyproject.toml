@@ -14,7 +14,7 @@ dependencies = [
     "mercantile>=1.2.1",
     "pillow>=10.4.0",
     "rasterio>=1.3.11",
-    "shapely>=2.0.7",
+    "shapely>=1.8.0",
     "tqdm>=4.67.1",
 ]
 
