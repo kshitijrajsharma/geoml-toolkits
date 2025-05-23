@@ -1,3 +1,9 @@
+## 0.3.6 (2025-05-24)
+
+### Fix
+
+- **extension**: fixes png not being available to the extension
+
 ## 0.3.5 (2025-05-22)
 
 ### Fix
