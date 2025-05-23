@@ -105,6 +105,7 @@ async def download_tile(
     georeference: bool = False,
     prefix: str = "OAM",
     crs: str = "4326",
+    extension: str = 'tif',
 ) -> None:
     """
     Download a single tile asynchronously.
@@ -141,9 +142,6 @@ async def download_tile(
         if response.status != 200:
             print(f"Error fetching tile {tile_id}: {response.status}")
             return
-
-   
-        extension = 'tif'
         
         tile_data = await response.content.read()
         tile_filename = f"{prefix}-{tile_id.x}-{tile_id.y}-{tile_id.z}.{extension}"
@@ -195,6 +193,7 @@ async def download_tiles(
     crs: str = "4326",
     tile_scheme: str = "xyz",
     is_tilejson: bool = False,
+    extension: str = 'tif',
 ) -> None:
     """
     Download tiles from a GeoJSON or bounding box asynchronously.
@@ -266,6 +265,7 @@ async def download_tiles(
                     georeference,
                     prefix,
                     crs,
+                    extension=extension,
                 )
             )
             for tile_id in tiles
