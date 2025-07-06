@@ -188,7 +188,7 @@ async def download_tiles(
     bbox: Optional[List[float]] = None,
     within: bool = False,
     georeference: bool = False,
-    dump: bool = False,
+    dump_tile_geometries_as_geojson: bool = False,
     prefix: str = "OAM",
     crs: str = "4326",
     tile_scheme: str = "xyz",
@@ -206,7 +206,7 @@ async def download_tiles(
         bbox: Bounding box coordinates
         within: Download only tiles completely within geometry
         georeference: Add georeference metadata to tiles
-        dump: Dump tile geometries to a GeoJSON file
+        dump_tile_geometries_as_geojson: Dump tile geometries to a GeoJSON file
         prefix: Prefix for output filenames
         crs: Coordinate reference system (4326 or 3857)
     """
@@ -216,7 +216,7 @@ async def download_tiles(
     tiles = get_tiles(zoom=zoom, geojson=geojson, bbox=bbox, within=within)
     print(f"Total tiles fetched: {len(tiles)}")
 
-    if dump:
+    if dump_tile_geometries_as_geojson:
         feature_collection = {
             "type": "FeatureCollection",
             "features": [mercantile.feature(tile) for tile in tiles],

@@ -37,7 +37,9 @@ class VectorizeMasks:
         simplify_tolerance: float = 0.2,
         min_area: float = 1.0,
         orthogonalize: bool = True,
-        algorithm: str = "potrace",
+        ortho_skew_tolerance_deg: int = 0,
+        ortho_max_angle_change_deg: int = 45,
+        algorithm: str = "rasterio",
         tmp_dir: str = None,
         logger: logging.Logger = None,
     ):
@@ -55,6 +57,8 @@ class VectorizeMasks:
         self.simplify_tolerance = simplify_tolerance
         self.min_area = min_area
         self.orthogonalize = orthogonalize
+        self.ortho_skew_tolerance_deg = ortho_skew_tolerance_deg
+        self.ortho_max_angle_change_deg = ortho_max_angle_change_deg
         self.algorithm = algorithm.lower()
         self.tmp_dir = tmp_dir or os.getcwd()
 
@@ -452,7 +456,11 @@ class VectorizeMasks:
         # Orthogonalize if requested
         if self.orthogonalize:
             self.logger.info("Orthogonalizing geometries...")
-            gdf = orthogonalize_gdf(gdf)
+            gdf = orthogonalize_gdf(
+                gdf,
+                maxAngleChange=self.ortho_max_angle_change_deg,
+                skewTolerance=self.ortho_skew_tolerance_deg,
+            )
 
         # Filter by area
         if self.min_area > 0:
@@ -591,8 +599,8 @@ def main():
     parser.add_argument(
         "--algorithm",
         choices=["potrace", "rasterio"],
-        default="potrace",
-        help="Vectorization algorithm to use (default: potrace)",
+        default="rasterio",
+        help="Vectorization algorithm to use (default: rasterio)",
     )
     parser.add_argument(
         "-n",

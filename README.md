@@ -39,7 +39,7 @@ await TMSDownloader.download_tiles(
     out=WORK_DIR,
     bbox=BBOX,
     georeference=True,
-    dump=True,
+    dump_tile_geometries_as_geojson=True,
     prefix="OAM"
 )
 
@@ -48,8 +48,8 @@ tiles_geojson = os.path.join(WORK_DIR, "tiles.geojson")
 await OSMDownloader.download_osm_data(
     geojson=tiles_geojson,
     out=os.path.join(WORK_DIR, "labels"),
-    dump=True,
-    split=True
+    dump_results=True,
+    split_output_by_tiles=True
 )
 ```
 Learn more [here](./example_usage.ipynb) 
@@ -115,7 +115,7 @@ await TMSDownloader.download_tiles(
     out=WORK_DIR,
     bbox=BBOX,
     georeference=True,
-    dump=True,
+    dump_tile_geometries_as_geojsondump=True,
     prefix="OAM"
 )
 ```
@@ -136,8 +136,8 @@ tiles_geojson = os.path.join(WORK_DIR, "tiles.geojson")
 await OSMDownloader.download_osm_data(
     geojson=tiles_geojson,
     out=os.path.join(WORK_DIR, "labels"),
-    dump=True,
-    split=True
+    dump_results=True,
+    split_output_by_tiles=True,
 )
 ```
 
