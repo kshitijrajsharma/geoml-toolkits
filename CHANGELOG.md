@@ -1,3 +1,9 @@
+## 0.3.7 (2025-07-06)
+
+### Fix
+
+- **consistency-in-inputs-of-functions**: adds explainable param of the funtion , also exposes the two internal param for the orthogonalization into the vectorizemasks param
+
 ## 0.3.6 (2025-05-24)
 
 ### Fix
