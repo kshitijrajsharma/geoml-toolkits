@@ -566,8 +566,8 @@ class VectorizeMasks:
 
         # Apply cleaning and processing
         gdf = self.clean_and_process_gdf(gdf)
-
-        # Write the final cleaned GeoJSON
+        if gdf.crs and gdf.crs != "EPSG:4326":
+            gdf = gdf.to_crs("EPSG:4326")
         gdf.to_file(output_geojson, driver="GeoJSON")
         self.logger.info(f"Final cleaned GeoJSON written to: {output_geojson}")
 
