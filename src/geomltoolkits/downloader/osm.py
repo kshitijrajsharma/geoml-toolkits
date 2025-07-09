@@ -226,6 +226,8 @@ async def download_osm_data(
     split_output_by_tiles: bool = False,
     split_prefix: str = "OAM",
     crs: str = "4326",
+    burn_splits_to_raster: bool = False,
+    burn_value: int = 255,
 ) -> Dict[str, Any]:
     """
     Main async function to download OSM data for a given geometry.
@@ -291,6 +293,8 @@ async def download_osm_data(
                     geojson,
                     os.path.join(out, "split"),
                     prefix=split_prefix,
+                    burn_to_raster=burn_splits_to_raster,
+                    burn_value=burn_value,
                 )
             return out
 

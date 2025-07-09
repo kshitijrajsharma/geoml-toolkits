@@ -4,7 +4,9 @@ from typing import Any, Dict, Optional, Union
 
 import geopandas as gpd
 import mercantile
+import numpy as np
 import rasterio
+import rasterio.features as features
 from pyproj import Transformer
 from rasterio.merge import merge
 from rasterio.transform import from_bounds
@@ -42,6 +44,7 @@ def merge_rasters(input_files, output_path):
         src.close()
     return output_path
 
+
 def georeference_tile(
     input_tiff: str,
     x: int,
@@ -49,11 +52,11 @@ def georeference_tile(
     z: int,
     output_tiff: str,
     crs: str = "4326",
-    overlap_pixels: int = 0
+    overlap_pixels: int = 0,
 ) -> str:
     """
     Georeference a TIFF image based on tile coordinates (x, y, z) with optional overlap.
-    
+
     Args:
         input_tiff: Path to input TIFF file
         x: Tile x coordinate
@@ -62,67 +65,75 @@ def georeference_tile(
         output_tiff: Path to save the georeferenced output file
         crs: Coordinate reference system (4326 or 3857)
         overlap_pixels: Number of pixels to expand the tile bounds by
-        
+
     Returns:
         Path to georeferenced TIFF file
     """
     tile = mercantile.Tile(x=x, y=y, z=z)
     bounds = mercantile.bounds(tile)
-    
+
     os.makedirs(os.path.dirname(os.path.abspath(output_tiff)), exist_ok=True)
-    
+
     with rasterio.open(input_tiff) as src:
         kwargs = src.meta.copy()
-        
+
         if overlap_pixels > 0:
             if crs == "3857":
-                transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+                transformer = Transformer.from_crs(
+                    "EPSG:4326", "EPSG:3857", always_xy=True
+                )
                 xmin, ymin = transformer.transform(bounds.west, bounds.south)
                 xmax, ymax = transformer.transform(bounds.east, bounds.north)
-                
+
                 x_res = (xmax - xmin) / 256
                 y_res = (ymax - ymin) / 256
-                
-                xmin -= (overlap_pixels * x_res)
-                ymin -= (overlap_pixels * y_res)
-                xmax += (overlap_pixels * x_res)
-                ymax += (overlap_pixels * y_res)
+
+                xmin -= overlap_pixels * x_res
+                ymin -= overlap_pixels * y_res
+                xmax += overlap_pixels * x_res
+                ymax += overlap_pixels * y_res
 
                 mercator_bounds = (xmin, ymin, xmax, ymax)
                 transform = from_bounds(*mercator_bounds, 256, 256)
             else:
                 x_res = (bounds.east - bounds.west) / 256
                 y_res = (bounds.north - bounds.south) / 256
-                
+
                 adjusted_bounds = (
                     bounds.west - (overlap_pixels * x_res),
                     bounds.south - (overlap_pixels * y_res),
                     bounds.east + (overlap_pixels * x_res),
-                    bounds.north + (overlap_pixels * y_res)
+                    bounds.north + (overlap_pixels * y_res),
                 )
-                
+
                 transform = from_bounds(*adjusted_bounds, 256, 256)
         else:
             if crs == "3857":
-                transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+                transformer = Transformer.from_crs(
+                    "EPSG:4326", "EPSG:3857", always_xy=True
+                )
                 xmin, ymin = transformer.transform(bounds.west, bounds.south)
                 xmax, ymax = transformer.transform(bounds.east, bounds.north)
                 mercator_bounds = (xmin, ymin, xmax, ymax)
                 transform = from_bounds(*mercator_bounds, 256, 256)
             else:
                 transform = from_bounds(*bounds, 256, 256)
-        
-        kwargs.update({
-            'crs': rasterio.CRS.from_epsg(3857 if crs == "3857" else 4326),
-            'transform': transform
-        })
-        
-        with rasterio.open(output_tiff, 'w', **kwargs) as dst:
+
+        kwargs.update(
+            {
+                "crs": rasterio.CRS.from_epsg(3857 if crs == "3857" else 4326),
+                "transform": transform,
+            }
+        )
+
+        with rasterio.open(output_tiff, "w", **kwargs) as dst:
             dst.write(src.read())
             dst.update_tags(ns="rio_georeference", georeferencing_applied="True")
             if overlap_pixels > 0:
-                dst.update_tags(ns="rio_georeference", overlap_applied=str(overlap_pixels))
-    
+                dst.update_tags(
+                    ns="rio_georeference", overlap_applied=str(overlap_pixels)
+                )
+
     # print(f"Successfully georeferenced tile to EPSG:{crs} with {overlap_pixels} pixels overlap: {output_tiff}")
     return output_tiff
 
@@ -326,7 +337,12 @@ def check_geojson_geom(geojson: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def split_geojson_by_tiles(
-    mother_geojson_path, children_geojson_path, output_dir, prefix="OAM"
+    mother_geojson_path,
+    children_geojson_path,
+    output_dir,
+    prefix="OAM",
+    burn_to_raster=False,
+    burn_value=255,
 ):
     # Load mother GeoJSON (osm result)
     mother_data = gpd.read_file(mother_geojson_path)
@@ -343,11 +359,53 @@ def split_geojson_by_tiles(
         y = y.split("=")[1]
         z = z.split("=")[1]
 
+        tile_filename = f"{prefix}-{x}-{y}-{z}"
+
         clipped_data = mother_data[mother_data.intersects(tile_geom)].copy()
         clipped_data = gpd.clip(clipped_data, tile_geom)
+        os.makedirs(os.path.join(output_dir, "geojson"), exist_ok=True)
 
-        clipped_filename = os.path.join(output_dir, f"{prefix}-{x}-{y}-{z}.geojson")
+        clipped_filename = os.path.join(
+            output_dir, "geojson", f"{tile_filename}.geojson"
+        )
         clipped_data.to_file(clipped_filename, driver="GeoJSON", encoding="utf-8")
+
+        if burn_to_raster:
+            os.makedirs(os.path.join(output_dir, "mask"), exist_ok=True)
+            tif_path = os.path.join(output_dir, "mask", f"{tile_filename}.tif")
+
+            minx, miny, maxx, maxy = tile_geom.bounds
+            width = 256
+            height = 256
+
+            transform = from_bounds(minx, miny, maxx, maxy, width, height)
+
+            if not clipped_data.empty:
+                shapes = [(geom, burn_value) for geom in clipped_data.geometry]
+                mask = features.rasterize(
+                    shapes=shapes,
+                    out_shape=(height, width),
+                    transform=transform,
+                    fill=0,
+                    nodata=0,
+                    default_value=burn_value,
+                    dtype=np.uint8,
+                )
+            else:
+                mask = np.zeros((height, width), dtype=np.uint8)
+
+            with rasterio.open(
+                tif_path,
+                "w",
+                driver="GTiff",
+                height=height,
+                width=width,
+                count=1,
+                dtype=np.uint8,
+                transform=transform,
+                crs=clipped_data.crs,
+            ) as dst:
+                dst.write(mask, 1)
 
 
 import glob
@@ -358,38 +416,40 @@ def georeference_prediction_tiles(
     prediction_path: str,
     georeference_path: str,
     overlap_pixels: int = 0,
-) :
+):
     """
     Georeference all prediction tiles based on their embedded x,y,z coordinates in filenames.
-    
+
     Args:
         prediction_path: Directory containing prediction tiles
         georeference_path: Directory to save georeferenced tiles
         tile_overlap_distance: Overlap distance between tiles
-        
+
     Returns:
         List of paths to georeferenced tiles
     """
-    print('test senorita')
+    print("test senorita")
     os.makedirs(georeference_path, exist_ok=True)
-    
+
     image_files = glob.glob(os.path.join(prediction_path, "*.png"))
     image_files.extend(glob.glob(os.path.join(prediction_path, "*.jpeg")))
-    
+
     georeferenced_files = []
-    
+
     for image_file in image_files:
         filename = os.path.basename(image_file)
         filename_without_ext = re.sub(r"\.(png|jpeg)$", "", filename)
-        
+
         try:
             parts = re.split("-", filename_without_ext)
             if len(parts) >= 3:
                 # Get the last three parts which should be x, y, z
                 x_tile, y_tile, zoom = map(int, parts[-3:])
-                
-                output_tiff = os.path.join(georeference_path, f"{filename_without_ext}.tif")
-                
+
+                output_tiff = os.path.join(
+                    georeference_path, f"{filename_without_ext}.tif"
+                )
+
                 georeferenced_file = georeference_tile(
                     input_tiff=image_file,
                     x=x_tile,
@@ -397,16 +457,15 @@ def georeference_prediction_tiles(
                     z=zoom,
                     output_tiff=output_tiff,
                     crs="4326",
-                    overlap_pixels=overlap_pixels
+                    overlap_pixels=overlap_pixels,
                 )
-                
+
                 georeferenced_files.append(georeferenced_file)
-                # print(f"Georeferenced {filename} to {output_tiff}")
             else:
                 print(f"Warning: Could not extract tile coordinates from {filename}")
-                
+
         except Exception as e:
             print(f"Error georeferencing {filename}: {str(e)}")
-    
+
     print(f"Georeferenced {len(georeferenced_files)} tiles to {georeference_path}")
     return georeference_path
