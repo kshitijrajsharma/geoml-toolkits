@@ -1,3 +1,9 @@
+## 0.3.9 (2025-07-09)
+
+### Fix
+
+- **burn**: fixes burn value of rasterization for splitted features
+
 ## 0.3.8 (2025-07-08)
 
 ### Fix
