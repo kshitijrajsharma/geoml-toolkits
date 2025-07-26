@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from typing import Any, Dict, Optional, Union
 
 import geopandas as gpd
@@ -469,3 +470,18 @@ def georeference_prediction_tiles(
 
     print(f"Georeferenced {len(georeferenced_files)} tiles to {georeference_path}")
     return georeference_path
+
+
+def detect_scheme_from_url(url: str) -> str:
+    if "{q}" in url or "quadkey" in url.lower():
+        return "quadkey"
+    elif "{-y}" in url.lower():
+        return "tms"
+    elif all(tag in url for tag in ["{z}", "{x}", "{y}"]):
+        return "xyz"
+    elif "service=wms" in url.lower():
+        return "wms"
+    elif "service=wmts" in url.lower():
+        return "wmts"
+    else:
+        return "custom"
