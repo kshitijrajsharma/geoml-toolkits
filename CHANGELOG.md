@@ -1,3 +1,9 @@
+## 0.4.0 (2025-07-29)
+
+### Feat
+
+- **tile**: add support for multiple tile formats
+
 ## 0.3.9 (2025-07-09)
 
 ### Fix
