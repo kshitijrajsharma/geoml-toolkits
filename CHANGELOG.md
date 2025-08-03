@@ -1,3 +1,9 @@
+## 0.4.1 (2025-08-03)
+
+### Fix
+
+- **bing**: fixes support of bing and esri images
+
 ## 0.4.0 (2025-07-29)
 
 ### Feat
