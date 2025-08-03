@@ -477,6 +477,8 @@ def detect_scheme_from_url(url: str) -> str:
         return "quadkey"
     elif "{-y}" in url.lower():
         return "tms"
+    elif "tiles.mapbox.com" in url.lower():
+        return "mapbox"
     elif all(tag in url for tag in ["{z}", "{x}", "{y}"]):
         return "xyz"
     elif "service=wms" in url.lower():

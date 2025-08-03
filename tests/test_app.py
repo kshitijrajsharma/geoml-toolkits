@@ -44,6 +44,77 @@ class TestDownloader(unittest.IsolatedAsyncioTestCase):
         tif_files = glob.glob(os.path.join(tilejson_test_dir, "chips", "*.tif"))
         self.assertEqual(len(tif_files), 36, "Number of .tif files should be 36")
 
+    async def test_download_bing_tiles(self):
+        """Test downloading tiles from Bing tile service."""
+        bing_tms = "https://ecn.t{s}.tiles.virtualearth.net/tiles/a{q}.jpeg?g=1"
+
+        bing_test_dir = os.path.join(self.work_dir, "bing_test")
+        os.makedirs(bing_test_dir, exist_ok=True)
+
+        await TMSDownloader.download_tiles(
+            tms=bing_tms,
+            zoom=self.zoom,
+            out=bing_test_dir,
+            bbox=self.bbox,
+            georeference=True,
+            dump_tile_geometries_as_geojson=True,
+            prefix="Bing",
+        )
+
+        tif_files = glob.glob(os.path.join(bing_test_dir, "chips", "*.tif"))
+        self.assertGreater(
+            len(tif_files), 0, "At least one .tif file should be downloaded"
+        )
+
+        tiles_geojson = os.path.join(bing_test_dir, "tiles.geojson")
+        self.assertTrue(
+            os.path.exists(tiles_geojson),
+            "tiles.geojson should be created when dump_tile_geometries_as_geojson=True",
+        )
+
+        gdf = gpd.read_file(tiles_geojson)
+        self.assertEqual(
+            len(gdf),
+            len(tif_files),
+            "Number of features in tiles.geojson should match number of downloaded tiles",
+        )
+
+    async def test_download_esri_tiles(self):
+        """Test downloading tiles from ESRI tile service."""
+        esri_tms = "https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?blankTile=false"
+
+        esri_test_dir = os.path.join(self.work_dir, "esri_test")
+        os.makedirs(esri_test_dir, exist_ok=True)
+
+        await TMSDownloader.download_tiles(
+            tms=esri_tms,
+            zoom=self.zoom,
+            out=esri_test_dir,
+            bbox=self.bbox,
+            georeference=True,
+            dump_tile_geometries_as_geojson=True,
+            prefix="ESRI",
+            tile_scheme="xyz",
+        )
+
+        tif_files = glob.glob(os.path.join(esri_test_dir, "chips", "*.tif"))
+        self.assertGreater(
+            len(tif_files), 0, "At least one .tif file should be downloaded"
+        )
+
+        tiles_geojson = os.path.join(esri_test_dir, "tiles.geojson")
+        self.assertTrue(
+            os.path.exists(tiles_geojson),
+            "tiles.geojson should be created when dump_tile_geometries_as_geojson=True",
+        )
+
+        gdf = gpd.read_file(tiles_geojson)
+        self.assertEqual(
+            len(gdf),
+            len(tif_files),
+            "Number of features in tiles.geojson should match number of downloaded tiles",
+        )
+
     async def test_download_tiles(self):
         # Download tiles
         await TMSDownloader.download_tiles(

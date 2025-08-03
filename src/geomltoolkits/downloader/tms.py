@@ -90,7 +90,13 @@ class TileSource:
 
         elif self.scheme == "quadkey":
             quadkey = mercantile.quadkey(tile)
-            return self.url.format(q=quadkey)
+            return self.url.format(q=quadkey, s=str((tile.x + tile.y) % 4))
+
+        elif self.scheme == "mapbox":
+            # Mapbox uses subdomains a, b, c, d for load balancing
+            subdomain_letters = ["a", "b", "c", "d"]
+            subdomain = subdomain_letters[(tile.x + tile.y) % 4]
+            return self.url.format(z=tile.z, x=tile.x, y=tile.y, s=subdomain)
 
         elif self.scheme == "custom":
             return (
@@ -240,7 +246,6 @@ async def download_tiles(
     """
     chips_dir = os.path.join(out, "chips")
     os.makedirs(chips_dir, exist_ok=True)
-
     tiles = get_tiles(zoom=zoom, geojson=geojson, bbox=bbox, within=within)
     print(f"Total tiles fetched: {len(tiles)}")
 
@@ -276,7 +281,7 @@ async def download_tiles(
             tile_scheme = detect_scheme_from_url(tms)
         else:
             tile_scheme = tms.scheme
-
+        print(f"Detected tile scheme: {tile_scheme}")
     async with aiohttp.ClientSession() as session:
         if isinstance(tms, str):
             if is_tilejson:
