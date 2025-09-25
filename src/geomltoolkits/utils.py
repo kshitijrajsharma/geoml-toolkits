@@ -135,7 +135,6 @@ def georeference_tile(
                     ns="rio_georeference", overlap_applied=str(overlap_pixels)
                 )
 
-    # print(f"Successfully georeferenced tile to EPSG:{crs} with {overlap_pixels} pixels overlap: {output_tiff}")
     return output_tiff
 
 
@@ -413,6 +412,66 @@ import glob
 import re
 
 
+def validate_polygon_geometries(input_geojson, output_path=None):
+    """Validate and clean polygon geometries using geopandas standards."""
+    if isinstance(input_geojson, str) and os.path.isfile(input_geojson):
+        gdf = gpd.read_file(input_geojson)
+    else:
+        geojson_data = load_geojson(input_geojson)
+        gdf = gpd.GeoDataFrame.from_features(geojson_data["features"])
+    
+    if len(gdf) < 1:
+        raise ValueError("Empty file - no geometries provided")
+    
+    input_count = len(gdf)
+    valid_rows = []
+    removed_count = 0
+    
+    for idx, row in gdf.iterrows():
+        geom = row.geometry
+        
+        if geom is None or geom.is_empty:
+            removed_count += 1
+            continue
+        
+        geom_type = geom.geom_type
+        if geom_type not in ["Polygon", "MultiPolygon"]:
+            removed_count += 1
+            continue
+        
+        if not geom.is_valid:
+            try:
+                fixed_geom = geom.buffer(0)
+                if fixed_geom.is_valid and not fixed_geom.is_empty:
+                    row = row.copy()
+                    row.geometry = fixed_geom
+                else:
+                    removed_count += 1
+                    continue
+            except Exception:
+                removed_count += 1
+                continue
+        
+        valid_rows.append(row)
+    
+    valid_count = len(valid_rows)
+    print(f"Input features: {input_count}")
+    print(f"Valid features: {valid_count}")
+    print(f"Removed features: {removed_count}")
+    
+    if valid_count < 1:
+        raise ValueError("No valid geometries remaining after validation")
+    
+    valid_gdf = gpd.GeoDataFrame(valid_rows).reset_index(drop=True)
+    
+    if output_path:
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        valid_gdf.to_file(output_path, driver="GeoJSON")
+        return output_path
+    else:
+        return json.loads(valid_gdf.to_json())
+
+
 def georeference_prediction_tiles(
     prediction_path: str,
     georeference_path: str,
@@ -429,7 +488,6 @@ def georeference_prediction_tiles(
     Returns:
         List of paths to georeferenced tiles
     """
-    print("test senorita")
     os.makedirs(georeference_path, exist_ok=True)
 
     image_files = glob.glob(os.path.join(prediction_path, "*.png"))
@@ -462,13 +520,9 @@ def georeference_prediction_tiles(
                 )
 
                 georeferenced_files.append(georeferenced_file)
-            else:
-                print(f"Warning: Could not extract tile coordinates from {filename}")
 
-        except Exception as e:
-            print(f"Error georeferencing {filename}: {str(e)}")
-
-    print(f"Georeferenced {len(georeferenced_files)} tiles to {georeference_path}")
+        except Exception:
+            continue
     return georeference_path
 
 
