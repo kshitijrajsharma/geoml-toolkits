@@ -488,6 +488,7 @@ def georeference_prediction_tiles(
     Returns:
         List of paths to georeferenced tiles
     """
+    print("test senorita")
     os.makedirs(georeference_path, exist_ok=True)
 
     image_files = glob.glob(os.path.join(prediction_path, "*.png"))
@@ -520,9 +521,13 @@ def georeference_prediction_tiles(
                 )
 
                 georeferenced_files.append(georeferenced_file)
+            else:
+                print(f"Warning: Could not extract tile coordinates from {filename}")
 
-        except Exception:
-            continue
+        except Exception as e:
+            print(f"Error georeferencing {filename}: {str(e)}")
+
+    print(f"Georeferenced {len(georeferenced_files)} tiles to {georeference_path}")
     return georeference_path
 
 
