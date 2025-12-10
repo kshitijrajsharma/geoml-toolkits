@@ -467,9 +467,8 @@ def validate_polygon_geometries(input_geojson, output_path=None):
     if output_path:
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
         valid_gdf.to_file(output_path, driver="GeoJSON")
-        return output_path
-    else:
-        return json.loads(valid_gdf.to_json())
+
+    return json.loads(valid_gdf.to_json())
 
 
 def georeference_prediction_tiles(
