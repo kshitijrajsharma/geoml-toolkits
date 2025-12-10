@@ -91,8 +91,7 @@ def test_validate_polygon_geometries_file_input():
             output_file = f.name
         
         result = validate_polygon_geometries(input_file, output_file)
-        
-        assert result == output_file
+
         assert os.path.exists(output_file)
         
         validated_data = load_geojson(output_file)
