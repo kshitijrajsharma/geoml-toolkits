@@ -3,7 +3,7 @@ import os
 
 import numpy as np
 import rasterio
-from rasterio.windows import Window
+from rasterio.windows import Window, transform
 from shapely.geometry import box, mapping
 
 from .._logging import get_logger, track
@@ -51,7 +51,7 @@ def create_patches(
                 if np.all(data == 0):
                     continue
 
-                window_transform = rasterio.windows.transform(window, src_transform)
+                window_transform = transform(window, src_transform)
 
                 patch_profile = profile.copy()
                 patch_profile.update(

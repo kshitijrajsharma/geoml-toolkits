@@ -1,3 +1,5 @@
+from importlib.metadata import PackageNotFoundError, version
+
 from .geometry.crs import (
     create_transformer,
     degrees_to_km,
@@ -37,8 +39,14 @@ from .raster.patch import create_patches
 from .raster.vectorize import vectorize_mask, vectorize_raster
 from .training.prepare import prepare_dataset
 
+try:
+    __version__ = version("geomltoolkits")
+except PackageNotFoundError:
+    __version__ = "0.0.0"
+
 __all__ = [
     "UndirectedGraph",
+    "__version__",
     "bbox2geom",
     "burn_labels",
     "check_geojson_geom",

@@ -1,9 +1,34 @@
 import asyncio
+from importlib.metadata import PackageNotFoundError, version
 from typing import Annotated
 
 import typer
 
 app = typer.Typer(name="geoml", help="Geospatial Machine Learning Toolkits CLI")
+
+
+def _package_version() -> str:
+    try:
+        return version("geomltoolkits")
+    except PackageNotFoundError:
+        return "0.0.0"
+
+
+def _version_callback(show_version: bool) -> None:
+    if show_version:
+        typer.echo(_package_version())
+        raise typer.Exit()
+
+
+@app.callback()
+def main(
+    version_flag: Annotated[
+        bool,
+        typer.Option("--version", callback=_version_callback, is_eager=True, help="Show the CLI version and exit."),
+    ] = False,
+) -> None:
+    """Geospatial Machine Learning Toolkits CLI."""
+    _ = version_flag
 
 
 @app.command()
