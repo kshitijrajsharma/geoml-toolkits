@@ -1,3 +1,16 @@
+## 2.0.0 (2026-03-30)
+
+### Fix
+
+- **docs**: fixes doc cli versions
+- **lock**: fixes uv lock with new deps
+- **tests**: remove redundant assertion in polygon validation test
+- **validate**: fixes geom validation on the utils
+
+### Refactor
+
+- **logging**: refactor logging and common utils
+
 ## 0.4.2 (2025-09-25)
 
 ### Fix
