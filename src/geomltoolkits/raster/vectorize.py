@@ -11,7 +11,7 @@ from ..geometry.validate import filter_gdf_by_area, fix_geom
 log = get_logger(__name__)
 
 
-def vectorize_raster(input_tiff: str, threshold: float = 0) -> gpd.GeoDataFrame:
+def vectorize_raster(input_tiff: str, threshold: float = 0, default_crs: str = "EPSG:3857") -> gpd.GeoDataFrame:
     """Vectorize a GeoTIFF binary mask into polygons using rasterio.features."""
     with rasterio.open(input_tiff) as src:
         raster = src.read(1)
@@ -21,6 +21,10 @@ def vectorize_raster(input_tiff: str, threshold: float = 0) -> gpd.GeoDataFrame:
         shapes = list(rio_features.shapes(mask.astype(np.uint8), mask=mask, transform=transform))
 
     polygons = [Polygon(shape["coordinates"][0]) for shape, value in shapes if value == 1]
+
+    if crs is None:
+        crs = default_crs
+        log.warning("Input raster %s has no CRS, defaulting to %s", input_tiff, default_crs)
 
     log.info(f"Extracted {len(polygons)} polygons from {input_tiff}")
     return gpd.GeoDataFrame(geometry=polygons, crs=crs)

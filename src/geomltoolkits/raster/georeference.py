@@ -31,7 +31,16 @@ def georeference_tile(
         kwargs = src.meta.copy()
         transform, target_crs = _compute_transform(bounds, crs, overlap_pixels, tile_size)
 
-        kwargs.update({"crs": target_crs, "transform": transform})
+        kwargs.update(
+            {
+                "driver": "GTiff",
+                "crs": target_crs,
+                "transform": transform,
+                "height": src.height,
+                "width": src.width,
+                "count": src.count,
+            }
+        )
 
         with rasterio.open(output_tiff, "w", **kwargs) as dst:
             dst.write(src.read())
