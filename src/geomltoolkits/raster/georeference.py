@@ -21,6 +21,7 @@ def georeference_tile(
     crs: str = "4326",
     overlap_pixels: int = 0,
     tile_size: int = 256,
+    clip_bands_to: int | None = None,
 ) -> str:
     """Georeference a TIFF image based on tile coordinates (x, y, z) with optional overlap."""
     tile = mercantile.Tile(x=x, y=y, z=z)
@@ -30,6 +31,7 @@ def georeference_tile(
     with rasterio.open(input_tiff) as src:
         kwargs = src.meta.copy()
         transform, target_crs = _compute_transform(bounds, crs, overlap_pixels, tile_size)
+        band_count = min(src.count, clip_bands_to) if clip_bands_to is not None else src.count
 
         kwargs.update(
             {
@@ -38,12 +40,12 @@ def georeference_tile(
                 "transform": transform,
                 "height": src.height,
                 "width": src.width,
-                "count": src.count,
+                "count": band_count,
             }
         )
 
         with rasterio.open(output_tiff, "w", **kwargs) as dst:
-            dst.write(src.read())
+            dst.write(src.read(indexes=list(range(1, band_count + 1))))
             dst.update_tags(ns="rio_georeference", georeferencing_applied="True")
             if overlap_pixels > 0:
                 dst.update_tags(ns="rio_georeference", overlap_applied=str(overlap_pixels))
@@ -88,6 +90,7 @@ def georeference_prediction_tiles(
     overlap_pixels: int = 0,
     crs: str = "4326",
     tile_size: int = 256,
+    clip_bands_to: int | None = None,
 ) -> str:
     """Georeference all prediction tiles based on embedded x,y,z coordinates in filenames."""
     os.makedirs(georeference_path, exist_ok=True)
@@ -119,6 +122,7 @@ def georeference_prediction_tiles(
                 crs=crs,
                 overlap_pixels=overlap_pixels,
                 tile_size=tile_size,
+                clip_bands_to=clip_bands_to,
             )
             georeferenced_count += 1
         except Exception as e:
