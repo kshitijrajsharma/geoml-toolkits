@@ -30,15 +30,26 @@ class RawDataAPI:
         geometry: dict[str, Any],
         feature_type: str = "building",
         geometry_types: list[str] | None = None,
+        filters: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Request a snapshot of OSM data for a given geometry."""
+        """Request a snapshot of OSM data for a given geometry.
+
+        ``filters``, when provided, replaces the auto-built ``tags.all_geometry.join_or``
+        block. Use it to drive the raw-data API directly with multi-tag /
+        per-geometry filters, e.g.
+        ``{"tags": {"polygon": {"join_or": {"building": [], "amenity": ["hospital"]}}}}``.
+        When ``filters`` is None, the body falls back to a single
+        ``{feature_type: []}`` join_or for back-compat.
+        """
         if geometry_types is None:
             geometry_types = ["polygon"]
+        if filters is None:
+            filters = {"tags": {"all_geometry": {"join_or": {feature_type: []}}}}
 
         payload = {
             "fileName": "geomltoolkits",
             "geometry": geometry,
-            "filters": {"tags": {"all_geometry": {"join_or": {feature_type: []}}}},
+            "filters": filters,
             "geometryType": geometry_types,
         }
 
@@ -109,6 +120,7 @@ async def download_osm_data(
     api_url: str = "https://api-prod.raw-data.hotosm.org/v1",
     feature_type: str = "building",
     geometry_types: list[str] | None = None,
+    filters: dict[str, Any] | None = None,
     dump_results: bool = False,
     out: str | None = None,
     split_output_by_tiles: bool = False,
@@ -118,7 +130,13 @@ async def download_osm_data(
     burn_value: int = 255,
     max_wait_seconds: int = 600,
 ) -> dict[str, Any] | str:
-    """Download OSM data for a given geometry via the HOT Raw Data API."""
+    """Download OSM data for a given geometry via the HOT Raw Data API.
+
+    ``filters``: optional override for the raw-data API ``filters`` body block
+    (e.g. ``{"tags": {"polygon": {"join_or": {"building": ["yes"]}}}}``). When
+    set, ``feature_type`` is ignored. When unset, the request is built from
+    ``feature_type`` for back-compat with simple single-tag callers.
+    """
     if geojson is not None:
         geometry = detect_and_ensure_4326_geometry(geojson)
     else:
@@ -126,7 +144,9 @@ async def download_osm_data(
 
     api = RawDataAPI(api_url)
     log.info(f"OSM Data Last Updated: {await api.last_updated()}")
-    task_response = await api.request_snapshot(geometry, feature_type, geometry_types)
+    task_response = await api.request_snapshot(
+        geometry, feature_type=feature_type, geometry_types=geometry_types, filters=filters
+    )
     task_link = task_response.get("track_link")
 
     if not task_link:

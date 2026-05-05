@@ -1,7 +1,9 @@
 import glob
+import json
 import os
 import shutil
 import unittest
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import geopandas as gpd
 
@@ -118,6 +120,103 @@ class TestDownloader(unittest.IsolatedAsyncioTestCase):
         )
         osm_result_path = os.path.join(self.work_dir, "labels", "osm-result.geojson")
         self.assertTrue(os.path.isfile(osm_result_path), "OSM result file should be present")
+
+
+def _patched_session(captured: dict) -> MagicMock:
+    """Build a `aiohttp.ClientSession` replacement that captures POST payloads."""
+
+    class _RespCM:
+        async def __aenter__(self_inner):
+            resp = MagicMock()
+            resp.json = AsyncMock(return_value={"track_link": "/tasks/abc"})
+            resp.raise_for_status = MagicMock(return_value=None)
+            return resp
+
+        async def __aexit__(self_inner, *exc):
+            return False
+
+    class _SessionCM:
+        async def __aenter__(self_inner):
+            session = MagicMock()
+
+            def _post(url, data, headers):
+                captured["url"] = url
+                captured["data"] = data
+                captured["headers"] = headers
+                return _RespCM()
+
+            session.post = MagicMock(side_effect=_post)
+            return session
+
+        async def __aexit__(self_inner, *exc):
+            return False
+
+    factory = MagicMock(return_value=_SessionCM())
+    return factory
+
+
+class TestRawDataAPIPayload(unittest.IsolatedAsyncioTestCase):
+    """Assert the JSON body sent to the raw-data API matches the public contract."""
+
+    async def test_request_snapshot_uses_custom_filters(self):
+        captured: dict = {}
+        custom = {"tags": {"polygon": {"join_or": {"building": ["yes"], "amenity": ["hospital"]}}}}
+        with patch("geomltoolkits.downloader.osm.aiohttp.ClientSession", _patched_session(captured)):
+            api = OSMDownloader.RawDataAPI()
+            await api.request_snapshot(
+                geometry={"type": "Polygon", "coordinates": []},
+                filters=custom,
+                geometry_types=["polygon"],
+            )
+        body = json.loads(captured["data"])
+        self.assertEqual(body["filters"], custom)
+        self.assertEqual(body["geometryType"], ["polygon"])
+
+    async def test_request_snapshot_default_filters_back_compat(self):
+        captured: dict = {}
+        with patch("geomltoolkits.downloader.osm.aiohttp.ClientSession", _patched_session(captured)):
+            api = OSMDownloader.RawDataAPI()
+            await api.request_snapshot(
+                geometry={"type": "Polygon", "coordinates": []},
+                feature_type="building",
+            )
+        body = json.loads(captured["data"])
+        self.assertEqual(body["filters"], {"tags": {"all_geometry": {"join_or": {"building": []}}}})
+
+    async def test_download_osm_data_forwards_filters(self):
+        """`download_osm_data` must forward `filters` to `RawDataAPI.request_snapshot`."""
+        custom = {"tags": {"polygon": {"join_or": {"amenity": ["school"]}}}}
+        seen: dict = {}
+
+        async def _fake_request_snapshot(self_, geometry, feature_type="building", geometry_types=None, filters=None):
+            seen["filters"] = filters
+            seen["feature_type"] = feature_type
+            seen["geometry_types"] = geometry_types
+            return {"track_link": "/tasks/x"}
+
+        async def _fake_poll(self_, task_link, max_wait_seconds=600):
+            return {"status": "SUCCESS", "result": {"download_url": "http://example.invalid/x.zip"}}
+
+        async def _fake_download(self_, download_url):
+            return {"type": "FeatureCollection", "features": []}
+
+        async def _fake_last_updated(self_):
+            return "2026-01-01"
+
+        with (
+            patch.object(OSMDownloader.RawDataAPI, "request_snapshot", _fake_request_snapshot),
+            patch.object(OSMDownloader.RawDataAPI, "poll_task_status", _fake_poll),
+            patch.object(OSMDownloader.RawDataAPI, "download_snapshot", _fake_download),
+            patch.object(OSMDownloader.RawDataAPI, "last_updated", _fake_last_updated),
+        ):
+            result = await OSMDownloader.download_osm_data(
+                geojson={"type": "Polygon", "coordinates": [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]]},
+                filters=custom,
+                geometry_types=["polygon"],
+            )
+        self.assertEqual(seen["filters"], custom)
+        self.assertEqual(seen["geometry_types"], ["polygon"])
+        self.assertEqual(result, {"type": "FeatureCollection", "features": []})
 
 
 class TestVectorizeMasks(unittest.TestCase):
