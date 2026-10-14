@@ -31,6 +31,7 @@ class RawDataAPI:
         feature_type: str = "building",
         geometry_types: list[str] | None = None,
         filters: dict[str, Any] | None = None,
+        use_st_within: bool = True,
     ) -> dict[str, Any]:
         """Request a snapshot of OSM data for a given geometry.
 
@@ -40,6 +41,9 @@ class RawDataAPI:
         ``{"tags": {"polygon": {"join_or": {"building": [], "amenity": ["hospital"]}}}}``.
         When ``filters`` is None, the body falls back to a single
         ``{feature_type: []}`` join_or for back-compat.
+
+        ``use_st_within``: True keeps only features
+        entirely inside ``geometry``, False also keeps features crossing its boundary.
         """
         if geometry_types is None:
             geometry_types = ["polygon"]
@@ -51,6 +55,7 @@ class RawDataAPI:
             "geometry": geometry,
             "filters": filters,
             "geometryType": geometry_types,
+            "useStWithin": use_st_within,
         }
 
         async with (
@@ -121,6 +126,7 @@ async def download_osm_data(
     feature_type: str = "building",
     geometry_types: list[str] | None = None,
     filters: dict[str, Any] | None = None,
+    use_st_within: bool = True,
     dump_results: bool = False,
     out: str | None = None,
     split_output_by_tiles: bool = False,
@@ -136,6 +142,8 @@ async def download_osm_data(
     (e.g. ``{"tags": {"polygon": {"join_or": {"building": ["yes"]}}}}``). When
     set, ``feature_type`` is ignored. When unset, the request is built from
     ``feature_type`` for back-compat with simple single-tag callers.
+
+    ``use_st_within``: False also returns features crossing the geometry boundary.
     """
     if geojson is not None:
         geometry = detect_and_ensure_4326_geometry(geojson)
@@ -145,7 +153,11 @@ async def download_osm_data(
     api = RawDataAPI(api_url)
     log.info(f"OSM Data Last Updated: {await api.last_updated()}")
     task_response = await api.request_snapshot(
-        geometry, feature_type=feature_type, geometry_types=geometry_types, filters=filters
+        geometry,
+        feature_type=feature_type,
+        geometry_types=geometry_types,
+        filters=filters,
+        use_st_within=use_st_within,
     )
     task_link = task_response.get("track_link")
 

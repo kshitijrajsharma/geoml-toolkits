@@ -182,14 +182,25 @@ class TestRawDataAPIPayload(unittest.IsolatedAsyncioTestCase):
             )
         body = json.loads(captured["data"])
         self.assertEqual(body["filters"], {"tags": {"all_geometry": {"join_or": {"building": []}}}})
+        self.assertIs(body["useStWithin"], True)
+
+    async def test_request_snapshot_sends_use_st_within_false(self):
+        captured: dict = {}
+        with patch("geomltoolkits.downloader.osm.aiohttp.ClientSession", _patched_session(captured)):
+            api = OSMDownloader.RawDataAPI()
+            await api.request_snapshot(geometry={"type": "Polygon", "coordinates": []}, use_st_within=False)
+        self.assertIs(json.loads(captured["data"])["useStWithin"], False)
 
     async def test_download_osm_data_forwards_filters(self):
         """`download_osm_data` must forward `filters` to `RawDataAPI.request_snapshot`."""
         custom = {"tags": {"polygon": {"join_or": {"amenity": ["school"]}}}}
         seen: dict = {}
 
-        async def _fake_request_snapshot(self_, geometry, feature_type="building", geometry_types=None, filters=None):
+        async def _fake_request_snapshot(
+            self_, geometry, feature_type="building", geometry_types=None, filters=None, use_st_within=True
+        ):
             seen["filters"] = filters
+            seen["use_st_within"] = use_st_within
             seen["feature_type"] = feature_type
             seen["geometry_types"] = geometry_types
             return {"track_link": "/tasks/x"}
@@ -213,8 +224,10 @@ class TestRawDataAPIPayload(unittest.IsolatedAsyncioTestCase):
                 geojson={"type": "Polygon", "coordinates": [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]]},
                 filters=custom,
                 geometry_types=["polygon"],
+                use_st_within=False,
             )
         self.assertEqual(seen["filters"], custom)
+        self.assertIs(seen["use_st_within"], False)
         self.assertEqual(seen["geometry_types"], ["polygon"])
         self.assertEqual(result, {"type": "FeatureCollection", "features": []})
 

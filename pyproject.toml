@@ -21,6 +21,7 @@ dependencies = [
     "scipy>=1.14",
     "shapely>=1.8",
     "typer>=0.15",
+    "rio-cogeo>=6.0.0",
 ]
 
 [dependency-groups]
