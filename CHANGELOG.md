@@ -1,3 +1,9 @@
+## 2.1.1 (2026-10-14)
+
+### Fix
+
+- **stwithin**: add feature of stiwthin
+
 ## 2.1.0 (2026-05-05)
 
 ### Feat
