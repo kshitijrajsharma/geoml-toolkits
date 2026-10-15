@@ -80,6 +80,8 @@ vectorize_mask(
 
 Detailed walkthrough notebook: [example_usage.ipynb](./example_usage.ipynb)
 
+`download_tiles` sends at most `max_concurrency` requests at once (default 100), and each request has its own `request_timeout` (default 60 seconds). Timeouts, connection errors, incomplete response bodies, HTTP 429 and HTTP 5xx are retried with exponential backoff, up to `max_attempts` tries in total (default 4). Tiles the source returns as HTTP 404 are skipped. Other HTTP and connection errors count as failures, and the call raises `RuntimeError` when failures exceed `max_failures`. An error while writing or georeferencing a tile stops the download.
+
 ## CLI Commands
 
 The package exposes a single CLI entrypoint:

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+from collections import Counter
 from typing import Any
 
 import aiohttp
@@ -8,6 +9,7 @@ import geopandas as gpd
 import mercantile
 import rasterio
 from rasterio.transform import from_bounds
+from tenacity import AsyncRetrying, retry_if_exception, stop_after_attempt, wait_exponential
 
 from .._logging import get_logger, track
 from ..geometry.crs import create_transformer, detect_scheme_from_url
@@ -103,6 +105,22 @@ class TileSource:
         return self.min_zoom <= zoom <= self.max_zoom
 
 
+def _is_transient(error: BaseException) -> bool:
+    if isinstance(error, aiohttp.ClientResponseError):
+        return error.status == 429 or error.status >= 500
+    return isinstance(error, (asyncio.TimeoutError, aiohttp.ClientConnectionError, aiohttp.ClientPayloadError))
+
+
+async def _fetch_tile_bytes(
+    session: aiohttp.ClientSession, tile_url: str, timeout: aiohttp.ClientTimeout
+) -> bytes | None:
+    async with session.get(tile_url, timeout=timeout) as response:
+        if response.status == 404:
+            return None
+        response.raise_for_status()
+        return await response.read()
+
+
 async def download_tile(
     session: aiohttp.ClientSession,
     tile_id: mercantile.Tile,
@@ -112,30 +130,30 @@ async def download_tile(
     prefix: str = "OAM",
     crs: str = "4326",
     extension: str = "tif",
+    request_timeout: float = 60,
+    max_attempts: int = 4,
 ) -> str | None:
-    """Download a single tile asynchronously."""
-    tile_url = tile_source.get_tile_url(tile_id)
-
-    try:
-        async with session.get(tile_url) as response:
-            if response.status != 200:
-                log.warning(f"Failed to fetch tile {tile_id}: HTTP {response.status}")
-                return None
-
-            tile_data = await response.content.read()
-            tile_filename = f"{prefix}-{tile_id.x}-{tile_id.y}-{tile_id.z}.{extension}"
-            tile_path = os.path.join(out_path, tile_filename)
-
-            with open(tile_path, "wb") as f:
-                f.write(tile_data)
-
-            if georeference and extension.lower() in ("tif", "tiff"):
-                _georeference_downloaded_tile(tile_id, tile_path, crs)
-
-            return tile_path
-    except Exception as e:
-        log.warning(f"Error downloading tile {tile_id}: {e}")
+    """Download one tile, retrying transient errors. Returns None when the source has no tile (HTTP 404)."""
+    timeout = aiohttp.ClientTimeout(total=request_timeout)
+    retrying = AsyncRetrying(
+        stop=stop_after_attempt(max_attempts),
+        wait=wait_exponential(max=30),
+        retry=retry_if_exception(_is_transient),
+        reraise=True,
+    )
+    tile_data = await retrying(_fetch_tile_bytes, session, tile_source.get_tile_url(tile_id), timeout)
+    if tile_data is None:
         return None
+
+    tile_filename = f"{prefix}-{tile_id.x}-{tile_id.y}-{tile_id.z}.{extension}"
+    tile_path = os.path.join(out_path, tile_filename)
+    with open(tile_path, "wb") as f:
+        f.write(tile_data)
+
+    if georeference and extension.lower() in ("tif", "tiff"):
+        _georeference_downloaded_tile(tile_id, tile_path, crs)
+
+    return tile_path
 
 
 def _georeference_downloaded_tile(tile_id: mercantile.Tile, tile_path: str, crs: str) -> None:
@@ -176,8 +194,16 @@ async def download_tiles(
     is_tilejson: bool = False,
     extension: str = "tif",
     max_failures: int | None = None,
+    max_concurrency: int = 100,
+    request_timeout: float = 60,
+    max_attempts: int = 4,
 ) -> str:
-    """Download tiles from a GeoJSON or bounding box asynchronously."""
+    """Download tiles from a GeoJSON or bounding box asynchronously.
+
+    Tiles the source does not have (HTTP 404) are skipped; any other error after retries counts as a failure.
+    """
+    if max_concurrency < 1 or max_attempts < 1:
+        raise ValueError("max_concurrency and max_attempts must be at least 1")
     chips_dir = os.path.join(out, "chips")
     os.makedirs(chips_dir, exist_ok=True)
     tiles = get_tiles(zoom=zoom, geojson=geojson, bbox=bbox, within=within)
@@ -190,24 +216,49 @@ async def download_tiles(
         tile_scheme = tms.scheme if isinstance(tms, TileSource) else detect_scheme_from_url(tms)
         log.info(f"Detected tile scheme: {tile_scheme}")
 
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=max_concurrency)) as session:
         tile_source = await _resolve_tile_source(session, tms, tile_scheme, is_tilejson)
 
         if not tile_source.is_valid_zoom(zoom):
             log.warning(f"Zoom level {zoom} is outside supported range ({tile_source.min_zoom}-{tile_source.max_zoom})")
 
-        tasks = [
-            asyncio.create_task(
-                download_tile(session, tile_id, tile_source, chips_dir, georeference, prefix, crs, extension)
-            )
-            for tile_id in tiles
-        ]
+        slots = asyncio.Semaphore(max_concurrency)
+        outcomes: Counter[str] = Counter()
 
-        results = []
-        for coro in track(asyncio.as_completed(tasks), description="Downloading tiles...", total=len(tasks)):
-            results.append(await coro)
+        async def download_in_slot(tile_id: mercantile.Tile) -> None:
+            async with slots:
+                try:
+                    tile_path = await download_tile(
+                        session,
+                        tile_id,
+                        tile_source,
+                        chips_dir,
+                        georeference,
+                        prefix,
+                        crs,
+                        extension,
+                        request_timeout,
+                        max_attempts,
+                    )
+                except (aiohttp.ClientError, asyncio.TimeoutError) as error:
+                    outcomes["failed"] += 1
+                    log.warning(f"Tile {tile_id} failed: {error!r}")
+                    return
+            outcomes["missing" if tile_path is None else "saved"] += 1
 
-    failures = sum(1 for r in results if r is None)
+        tasks = [asyncio.create_task(download_in_slot(tile_id)) for tile_id in tiles]
+        try:
+            for coro in track(asyncio.as_completed(tasks), description="Downloading tiles...", total=len(tasks)):
+                await coro
+        finally:
+            for task in tasks:
+                task.cancel()
+
+    missing, failures = outcomes["missing"], outcomes["failed"]
+    if missing:
+        log.info(f"{missing}/{len(tiles)} tiles returned HTTP 404 and were skipped")
+    if tiles and missing == len(tiles):
+        log.warning("Every tile returned HTTP 404; check the TMS URL")
     if failures:
         log.warning(f"{failures}/{len(tiles)} tiles failed to download")
     if max_failures is not None and failures > max_failures:

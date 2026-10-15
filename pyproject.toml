@@ -22,6 +22,7 @@ dependencies = [
     "shapely>=1.8",
     "typer>=0.15",
     "rio-cogeo>=6.0.0",
+    "tenacity>=9.2.1",
 ]
 
 [dependency-groups]
