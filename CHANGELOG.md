@@ -1,3 +1,9 @@
+## 2.1.2 (2026-10-15)
+
+### Fix
+
+- **download**: add try except ; add timeout
+
 ## 2.1.1 (2026-10-14)
 
 ### Fix
